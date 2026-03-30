@@ -24,11 +24,16 @@ export type LoginUserRequest = LoginUserArgs;
  */
 export interface RegisterUserArgs {
   /** 注册用户名。 */
-  username: string;
-  /** 注册用 QQ 账号。 */
-  qq: string;
+  name: string;
   /** 注册密码。 */
   password: string;
+  /** 邀请码。 */
+  invitation_code: string;
+
+  /** 兼容旧字段：username。 */
+  username?: string;
+  /** 兼容旧字段：qq。 */
+  qq?: string;
 }
 
 /**
@@ -72,6 +77,40 @@ export type RegisterUserResponse = RegisterUserResult;
 export type GetCurrentUserProfileResponse = UserInfo;
 
 /**
+ * 获取指定用户信息响应类型。
+ */
+export type GetUserProfileByIDResponse = UserInfo;
+
+/**
+ * 更新用户参数，对应 swagger 的 value.UpdateUserArgs。
+ */
+export interface UpdateUserArgs {
+  /** 用户 ID（可选，通常由 path 参数提供）。 */
+  user_id?: string;
+  /** 用户名。 */
+  name?: string;
+  /** 用户 QQ。 */
+  qq?: string;
+  /** 用户密码。 */
+  password?: string;
+}
+
+/**
+ * 更新用户请求类型。
+ */
+export type UpdateUserRequest = UpdateUserArgs;
+
+/**
+ * 更新用户响应类型。
+ */
+export type UpdateUserResponse = void;
+
+/**
+ * 删除用户响应类型。
+ */
+export type DeleteUserResponse = void;
+
+/**
  * 预留用户头像上传响应体，对应 value.ReserveUserAvatarResult。
  */
 export interface ReserveUserAvatarResult {
@@ -86,7 +125,7 @@ export interface ReserveUserAvatarArgs {
   /**
    * 上传请求使用的 Content-Type，需要与后续 PUT 保持一致。
    */
-  content_type: string;
+  content_type?: string;
 }
 
 /**
@@ -132,8 +171,43 @@ export async function getCurrentUserProfile(): Promise<GetCurrentUserProfileResp
 }
 
 /**
- * 调用 swagger 的 POST /users/{user_id}/avatar。
+ * 调用 swagger 的 GET /users/{user_id}。
  * 请求类型：无。
+ * 返回类型：GetUserProfileByIDResponse。
+ */
+export async function getUserProfileByID(
+  userID: string,
+): Promise<GetUserProfileByIDResponse> {
+  return httpClient.get<GetUserProfileByIDResponse>(`/users/${userID}`);
+}
+
+/**
+ * 调用 swagger 的 PUT /users/{user_id}。
+ * 请求类型：UpdateUserRequest。
+ * 返回类型：UpdateUserResponse。
+ */
+export async function updateUserProfile(
+  userID: string,
+  updateUserArgs: UpdateUserRequest,
+): Promise<UpdateUserResponse> {
+  await httpClient.put<UpdateUserResponse, UpdateUserRequest>(
+    `/users/${userID}`,
+    updateUserArgs,
+  );
+}
+
+/**
+ * 调用 swagger 的 DELETE /users/{user_id}。
+ * 请求类型：无。
+ * 返回类型：DeleteUserResponse。
+ */
+export async function deleteUser(userID: string): Promise<DeleteUserResponse> {
+  await httpClient.delete<DeleteUserResponse>(`/users/${userID}`);
+}
+
+/**
+ * 调用 swagger 的 POST /users/{user_id}/avatar。
+ * 请求类型：ReserveUserAvatarArgs。
  * 返回类型：ReserveUserAvatarResponse。
  */
 export async function reserveUserAvatar(

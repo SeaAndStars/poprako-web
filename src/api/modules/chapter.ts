@@ -2,7 +2,11 @@
  * 文件用途：封装章节（chapter）相关接口。
  */
 import { httpClient } from "../http";
-import type { IncludeQuery, PaginationQuery } from "../../types/common";
+import type {
+  IncludeQuery,
+  PaginationQuery,
+  WorkflowStatus,
+} from "../../types/common";
 import type { ChapterInfo } from "../../types/domain";
 
 /**
@@ -24,16 +28,55 @@ export type GetChapterListRequest = ChapterListQuery;
 export interface CreateChapterArgs {
   /** 所属漫画 ID。 */
   comic_id: string;
-  /** 章节标题。 */
-  title: string;
-  /** 章节序号。 */
-  index: number;
+  /** 章节副标题。 */
+  subtitle: string;
+
+  /** 兼容旧请求字段：章节标题。 */
+  title?: string;
+  /** 兼容旧请求字段：章节序号。 */
+  index?: number;
 }
 
 /**
  * 创建章节请求类型。
  */
 export type CreateChapterRequest = CreateChapterArgs;
+
+/**
+ * 创建章节结果，对应 swagger 的 value.CreateChapterResult。
+ */
+export interface CreateChapterResult {
+  /** 新建章节 ID。 */
+  id: string;
+}
+
+/**
+ * 创建章节响应类型。
+ */
+export type CreateChapterResponse = CreateChapterResult;
+
+/**
+ * 更新章节参数，对应 swagger 的 value.UpdateChapterArgs。
+ */
+export interface UpdateChapterArgs {
+  /** 章节 ID（可选，通常由 path 参数提供）。 */
+  chapter_id?: string;
+  /** 新章节副标题。 */
+  subtitle?: string;
+
+  /** 流程状态更新。 */
+  translate_status?: WorkflowStatus;
+  review_status?: WorkflowStatus;
+  proofread_status?: WorkflowStatus;
+  typeset_status?: WorkflowStatus;
+  upload_status?: WorkflowStatus;
+  publish_status?: WorkflowStatus;
+}
+
+/**
+ * 更新章节请求类型。
+ */
+export type UpdateChapterRequest = UpdateChapterArgs;
 
 /**
  * 获取章节列表响应类型。
@@ -43,7 +86,12 @@ export type GetChapterListResponse = ChapterInfo[];
 /**
  * 创建章节响应类型。
  */
-export type CreateChapterResponse = ChapterInfo;
+export type UpdateChapterResponse = void;
+
+/**
+ * 删除章节响应类型。
+ */
+export type DeleteChapterResponse = void;
 
 /**
  * 获取章节列表，对应 GET /chapters。
@@ -68,4 +116,30 @@ export async function createChapter(
     "/chapters",
     createChapterArgs,
   );
+}
+
+/**
+ * 更新章节，对应 PATCH /chapters/{chapter_id}。
+ * 请求类型：UpdateChapterRequest。
+ * 返回类型：UpdateChapterResponse。
+ */
+export async function updateChapter(
+  chapterID: string,
+  updateChapterArgs: UpdateChapterRequest,
+): Promise<UpdateChapterResponse> {
+  await httpClient.patch<UpdateChapterResponse, UpdateChapterRequest>(
+    `/chapters/${chapterID}`,
+    updateChapterArgs,
+  );
+}
+
+/**
+ * 删除章节，对应 DELETE /chapters/{chapter_id}。
+ * 请求类型：无。
+ * 返回类型：DeleteChapterResponse。
+ */
+export async function deleteChapter(
+  chapterID: string,
+): Promise<DeleteChapterResponse> {
+  await httpClient.delete<DeleteChapterResponse>(`/chapters/${chapterID}`);
 }

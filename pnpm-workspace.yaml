@@ -1,0 +1,6 @@
+onlyBuiltDependencies:
+  - electron
+  - electron-winstaller
+  - "@parcel/watcher"
+  - core-js
+  - esbuild

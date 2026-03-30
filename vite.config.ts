@@ -25,6 +25,8 @@ export default defineConfig(({ mode }) => {
   const host = env.FRONTEND_HOST || "127.0.0.1";
 
   return {
+    // Electron 生产模式通过 file:// 加载页面，资源路径需使用相对路径。
+    base: "./",
     plugins: [vue()],
     resolve: {
       alias: {
@@ -34,6 +36,8 @@ export default defineConfig(({ mode }) => {
     server: {
       host,
       port: devPort,
+      // Electron 开发模式依赖固定端口，避免 Vite 自动切换端口导致主进程加载失败。
+      strictPort: true,
     },
     preview: {
       host,

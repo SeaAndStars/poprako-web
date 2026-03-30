@@ -21,7 +21,12 @@ export type GetAssignmentListRequest = AssignmentListQuery;
 /**
  * 获取我的分配请求类型。
  */
-export type GetMyAssignmentsRequest = PaginationQuery;
+export type MyAssignmentListQuery = PaginationQuery & IncludeQuery;
+
+/**
+ * 获取我的分配请求类型。
+ */
+export type GetMyAssignmentsRequest = MyAssignmentListQuery;
 
 /**
  * 创建分配参数，对应 swagger 的 value.CreateChapterAssignmentArgs。
@@ -31,14 +36,42 @@ export interface CreateAssignmentArgs {
   chapter_id: string;
   /** 被分配用户 ID。 */
   user_id: string;
-  /** 分配角色，例如 translator / reviewer。 */
-  role: string;
+  /** 分配角色位图（后端定义的整数）。 */
+  role: number;
 }
 
 /**
  * 创建分配请求类型。
  */
 export type CreateAssignmentRequest = CreateAssignmentArgs;
+
+/**
+ * 创建分配结果，对应 swagger 的 value.CreateChapterAssignmentResult。
+ */
+export interface CreateAssignmentResult {
+  /** 新建分配记录 ID。 */
+  id: string;
+}
+
+/**
+ * 创建分配响应类型。
+ */
+export type CreateAssignmentResponse = CreateAssignmentResult;
+
+/**
+ * 更新分配参数，对应 swagger 的 value.UpdateAssignmentArgs。
+ */
+export interface UpdateAssignmentArgs {
+  /** 分配 ID（可选，通常由 path 参数提供）。 */
+  id?: string;
+  /** 新角色位图（后端定义的整数）。 */
+  role: number;
+}
+
+/**
+ * 更新分配请求类型。
+ */
+export type UpdateAssignmentRequest = UpdateAssignmentArgs;
 
 /**
  * 获取分配列表响应类型。
@@ -53,7 +86,12 @@ export type GetMyAssignmentsResponse = AssignmentInfo[];
 /**
  * 创建分配响应类型。
  */
-export type CreateAssignmentResponse = AssignmentInfo;
+export type UpdateAssignmentResponse = void;
+
+/**
+ * 删除分配响应类型。
+ */
+export type DeleteAssignmentResponse = void;
 
 /**
  * 获取章节分配列表，对应 GET /assignments。
@@ -75,11 +113,14 @@ export async function getAssignmentList(
  * 返回类型：GetMyAssignmentsResponse。
  */
 export async function getMyAssignments(
-  paginationQuery: GetMyAssignmentsRequest,
+  myAssignmentListQuery: GetMyAssignmentsRequest = {
+    offset: 0,
+    limit: 20,
+  },
 ): Promise<GetMyAssignmentsResponse> {
   const assignmentList = await httpClient.get<GetMyAssignmentsResponse>(
     "/assignments/mine",
-    paginationQuery,
+    myAssignmentListQuery,
   );
 
   return Array.isArray(assignmentList) ? assignmentList : [];
@@ -96,5 +137,33 @@ export async function createAssignment(
   return httpClient.post<CreateAssignmentResponse, CreateAssignmentRequest>(
     "/assignments",
     createAssignmentArgs,
+  );
+}
+
+/**
+ * 更新分配角色，对应 PUT /assignments/{assignment_id}。
+ * 请求类型：UpdateAssignmentRequest。
+ * 返回类型：UpdateAssignmentResponse。
+ */
+export async function updateAssignment(
+  assignmentID: string,
+  updateAssignmentArgs: UpdateAssignmentRequest,
+): Promise<UpdateAssignmentResponse> {
+  await httpClient.put<UpdateAssignmentResponse, UpdateAssignmentRequest>(
+    `/assignments/${assignmentID}`,
+    updateAssignmentArgs,
+  );
+}
+
+/**
+ * 删除分配，对应 DELETE /assignments/{assignment_id}。
+ * 请求类型：无。
+ * 返回类型：DeleteAssignmentResponse。
+ */
+export async function deleteAssignment(
+  assignmentID: string,
+): Promise<DeleteAssignmentResponse> {
+  await httpClient.delete<DeleteAssignmentResponse>(
+    `/assignments/${assignmentID}`,
   );
 }

@@ -2,34 +2,56 @@
   "name": "poprako-web-ms-frontend",
   "private": true,
   "version": "0.1.0",
+  "description": "Poprako 桌面客户端，面向漫画汉化团队协作管理。",
+  "author": "Poprako Team",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
+    "electron:dev": "concurrently -k -n WEB,ELECTRON \"pnpm dev\" \"node electron/wait-and-start.cjs\"",
     "lint": "eslint \"src/**/*.{ts,vue}\" --max-warnings=0",
     "type-check": "vue-tsc --noEmit -p tsconfig.app.json",
     "build": "pnpm lint && pnpm type-check && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:verify": "pnpm lint && pnpm type-check && vite build",
+    "electron:package": "pnpm electron:verify && electron-forge package",
+    "electron:make": "pnpm electron:verify && electron-forge make",
+    "electron:make:win": "pnpm electron:verify && electron-forge make --platform=win32",
+    "electron:make:mac": "pnpm electron:verify && electron-forge make --platform=darwin",
+    "electron:make:linux": "pnpm electron:verify && electron-forge make --platform=linux",
+    "electron:publish": "pnpm electron:verify && electron-forge publish"
   },
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.1",
     "ant-design-vue": "^4.2.6",
     "axios": "^1.8.4",
+    "electron-squirrel-startup": "^1.0.1",
     "pinia": "^3.0.3",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/maker-deb": "^7.11.1",
+    "@electron-forge/maker-rpm": "^7.11.1",
+    "@electron-forge/maker-squirrel": "^7.11.1",
+    "@electron-forge/maker-zip": "^7.11.1",
+    "@electron-forge/publisher-github": "^7.11.1",
     "@eslint/js": "^9.39.1",
     "@types/node": "^22.13.11",
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
     "@vitejs/plugin-vue": "^5.2.1",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.1.0",
     "eslint": "^9.22.0",
     "eslint-plugin-vue": "^9.33.0",
     "sass": "^1.83.4",
     "typescript": "^5.8.2",
     "vite": "^6.2.2",
     "vue-eslint-parser": "^9.4.3",
-    "vue-tsc": "^2.2.8"
+    "vue-tsc": "^2.2.8",
+    "wait-on": "^9.0.4"
   }
 }

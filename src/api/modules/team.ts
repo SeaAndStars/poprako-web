@@ -31,6 +31,36 @@ export interface CreateTeamArgs {
 export type CreateTeamRequest = CreateTeamArgs;
 
 /**
+ * 创建团队结果，对应 swagger 的 value.CreateTeamResult。
+ */
+export interface CreateTeamResult {
+  /** 新建团队 ID。 */
+  id: string;
+}
+
+/**
+ * 创建团队响应类型。
+ */
+export type CreateTeamResponse = CreateTeamResult;
+
+/**
+ * 更新团队参数，对应 swagger 的 value.UpdateTeamArgs。
+ */
+export interface UpdateTeamArgs {
+  /** 团队 ID（可选，通常由 path 参数提供）。 */
+  id?: string;
+  /** 团队名称。 */
+  name: string;
+  /** 团队简介。 */
+  description?: string;
+}
+
+/**
+ * 更新团队请求类型。
+ */
+export type UpdateTeamRequest = UpdateTeamArgs;
+
+/**
  * 获取当前用户团队列表响应类型。
  */
 export type GetMyTeamsResponse = TeamInfo[];
@@ -43,7 +73,12 @@ export type GetTeamListResponse = TeamInfo[];
 /**
  * 创建团队响应类型。
  */
-export type CreateTeamResponse = TeamInfo;
+export type UpdateTeamResponse = void;
+
+/**
+ * 删除团队响应类型。
+ */
+export type DeleteTeamResponse = void;
 
 /**
  * 预留团队头像上传响应体，对应 value.ReserveTeamAvatarResult。
@@ -111,6 +146,26 @@ export async function createTeam(
     "/teams",
     createTeamArgs,
   );
+}
+
+/**
+ * 更新团队信息，对应 PUT /teams/{team_id}。
+ */
+export async function updateTeam(
+  teamID: string,
+  updateTeamArgs: UpdateTeamRequest,
+): Promise<UpdateTeamResponse> {
+  await httpClient.put<UpdateTeamResponse, UpdateTeamRequest>(
+    `/teams/${teamID}`,
+    updateTeamArgs,
+  );
+}
+
+/**
+ * 删除团队，对应 DELETE /teams/{team_id}。
+ */
+export async function deleteTeam(teamID: string): Promise<DeleteTeamResponse> {
+  await httpClient.delete<DeleteTeamResponse>(`/teams/${teamID}`);
 }
 
 /**
