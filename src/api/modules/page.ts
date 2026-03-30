@@ -110,10 +110,10 @@ export async function getPageList(
 export async function reserveChapterPages(
   reserveChapterPagesArgs: ReserveChapterPagesRequest,
 ): Promise<ReserveChapterPagesResponse> {
-  return httpClient.post<ReserveChapterPagesResponse, ReserveChapterPagesRequest>(
-    "/pages",
-    reserveChapterPagesArgs,
-  );
+  return httpClient.post<
+    ReserveChapterPagesResponse,
+    ReserveChapterPagesRequest
+  >("/pages", reserveChapterPagesArgs);
 }
 
 /**

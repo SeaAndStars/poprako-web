@@ -129,6 +129,8 @@ export async function updateComic(
  * 请求类型：无。
  * 返回类型：DeleteComicResponse。
  */
-export async function deleteComic(comicID: string): Promise<DeleteComicResponse> {
+export async function deleteComic(
+  comicID: string,
+): Promise<DeleteComicResponse> {
   await httpClient.delete<DeleteComicResponse>(`/comics/${comicID}`);
 }

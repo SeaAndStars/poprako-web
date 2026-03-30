@@ -43,11 +43,7 @@ export interface ApiErrorPayload {
 /**
  * 后端流程状态枚举（model.WorkflowStatus）。
  */
-export type WorkflowStatus =
-  | "pending"
-  | "in_progress"
-  | "completed"
-  | "unset";
+export type WorkflowStatus = "pending" | "in_progress" | "completed" | "unset";
 
 /**
  * 统一时间戳类型（秒级/毫秒级由后端定义）。
