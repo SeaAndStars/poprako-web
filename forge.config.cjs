@@ -2,6 +2,17 @@
  * 文件用途：Electron Forge 构建与发布配置。
  * 覆盖 Windows/macOS/Linux 三端打包，并支持可选 GitHub Release 发布。
  */
+const path = require("node:path");
+
+/**
+ * Windows 打包图标路径（.ico）。
+ */
+const windowsIconPath = path.join(
+    __dirname,
+    "src",
+    "assets",
+    "poprako-logo.ico",
+);
 
 /**
  * 是否启用 GitHub 发布器。
@@ -35,12 +46,14 @@ module.exports = {
     packagerConfig: {
         asar: true,
         executableName: "poprako-desktop",
+        icon: windowsIconPath,
     },
     rebuildConfig: {},
     makers: [{
             name: "@electron-forge/maker-squirrel",
             config: {
                 name: "poprako_desktop",
+                setupIcon: windowsIconPath,
             },
         },
         {

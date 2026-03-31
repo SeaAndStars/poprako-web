@@ -11,6 +11,12 @@ const {
 } = require("electron");
 
 /**
+ * Electron 窗口图标路径。
+ * 使用 Windows 标准 .ico 图标，保证任务栏与窗口图标一致。
+ */
+const appIconPath = path.join(__dirname, "..", "src", "assets", "poprako-logo.ico");
+
+/**
  * 记录窗口控制 IPC 是否已注册，避免重复注册导致事件重复触发。
  */
 let hasRegisteredWindowControlHandlers = false;
@@ -195,6 +201,7 @@ async function createMainWindow() {
         height: 820,
         minWidth: 1024,
         minHeight: 680,
+        icon: appIconPath,
         show: false,
         frame: false,
         autoHideMenuBar: true,
