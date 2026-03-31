@@ -188,16 +188,18 @@
 import { computed, nextTick, ref, type Component } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
+  BookOutlined,
   CheckOutlined,
-  CloudUploadOutlined,
+  DashboardOutlined,
   LockOutlined,
   MenuOutlined,
-  MessageOutlined,
   PoweroffOutlined,
   QuestionCircleOutlined,
   RightOutlined,
   SettingOutlined,
+  StarOutlined,
   SyncOutlined,
+  TeamOutlined,
 } from "@ant-design/icons-vue";
 import { useAuthStore } from "../stores/auth";
 import type { ThemeMode } from "../theme/provider";
@@ -225,7 +227,7 @@ type SubPanelPlacement = "left" | "right";
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-const props = defineProps<{
+defineProps<{
   themeMode: ThemeMode;
 }>();
 const emit = defineEmits<{
@@ -260,16 +262,28 @@ const subPanelStyle = computed(() => {
 
 const sidebarItems: ReadonlyArray<SidebarItem> = [
   {
-    key: "dashboard",
-    label: "仪表盘",
-    icon: MessageOutlined,
-    to: "/dashboard",
+    key: "workspace",
+    label: "个人工作区",
+    icon: DashboardOutlined,
+    to: "/workspace",
   },
   {
-    key: "file-test",
-    label: "文件测试",
-    icon: CloudUploadOutlined,
-    to: "/file-test",
+    key: "comic-playground",
+    label: "漫画广场",
+    icon: BookOutlined,
+    to: "/comic-playground",
+  },
+  {
+    key: "member-list",
+    label: "成员一览",
+    icon: TeamOutlined,
+    to: "/member-list",
+  },
+  {
+    key: "special-symbols",
+    label: "特殊符号",
+    icon: StarOutlined,
+    to: "/special-symbols",
   },
 ];
 
@@ -277,26 +291,26 @@ const sidebarItems: ReadonlyArray<SidebarItem> = [
  * 根据当前路由返回侧栏选中项。
  */
 const activeSidebarKey = computed(() => {
-  if (route.path === "/file-test") {
-    return "file-test";
+  if (route.path === "/comic-playground") {
+    return "comic-playground";
   }
 
-  return "dashboard";
+  if (route.path === "/member-list") {
+    return "member-list";
+  }
+
+  if (route.path === "/special-symbols") {
+    return "special-symbols";
+  }
+
+  return "workspace";
 });
 
 /**
  * 主题菜单按钮提示文案。
  */
 const themeButtonTitle = computed(() => {
-  if (props.themeMode === "system") {
-    return "主题：跟随系统";
-  }
-
-  if (props.themeMode === "dark") {
-    return "主题：深色";
-  }
-
-  return "主题：浅色";
+  return "更多";
 });
 
 /**

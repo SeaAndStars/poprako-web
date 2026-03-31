@@ -3,9 +3,11 @@
  * 负责窗口创建、页面装载与应用生命周期管理。
  */
 const path = require("node:path");
+const fs = require("node:fs/promises");
 const {
     app,
     BrowserWindow,
+    dialog,
     ipcMain,
     shell,
 } = require("electron");
@@ -20,6 +22,19 @@ const appIconPath = path.join(__dirname, "..", "src", "assets", "poprako-logo.ic
  * 记录窗口控制 IPC 是否已注册，避免重复注册导致事件重复触发。
  */
 let hasRegisteredWindowControlHandlers = false;
+
+/**
+ * 支持导入为本地项目的图片扩展名集合。
+ * 当前按静态图片处理，后续如需支持 AVIF 等格式可继续扩展。
+ */
+const PROJECT_IMAGE_EXTENSIONS = new Set([
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".gif",
+    ".bmp",
+]);
 
 /**
  * Squirrel 安装事件处理。
@@ -88,6 +103,74 @@ function registerWindowControlHandlers() {
         }
         return senderWindow.isMaximized();
     });
+
+    ipcMain.handle("project:select-image-directory", async () => {
+        const dialogResult = await dialog.showOpenDialog({
+            title: "选择项目图片目录",
+            buttonLabel: "选择该目录",
+            properties: ["openDirectory"],
+        });
+
+        if (dialogResult.canceled || dialogResult.filePaths.length === 0) {
+            return null;
+        }
+
+        const directoryPath = dialogResult.filePaths[0];
+        const files = await collectProjectImageFiles(directoryPath, directoryPath);
+
+        return {
+            directoryPath,
+            files,
+        };
+    });
+}
+
+/**
+ * 递归收集目录中的图片文件。
+ * 返回值中的 name 使用相对路径，便于在前端保留稳定的页面显示顺序与来源提示。
+ */
+async function collectProjectImageFiles(currentDirectoryPath, rootDirectoryPath) {
+    const entries = await fs.readdir(currentDirectoryPath, {
+        withFileTypes: true,
+    });
+
+    const collectedFiles = [];
+
+    for (const entry of entries) {
+        const absolutePath = path.join(currentDirectoryPath, entry.name);
+
+        if (entry.isDirectory()) {
+            const nestedFiles = await collectProjectImageFiles(
+                absolutePath,
+                rootDirectoryPath,
+            );
+            collectedFiles.push(...nestedFiles);
+            continue;
+        }
+
+        if (!entry.isFile()) {
+            continue;
+        }
+
+        const extension = path.extname(entry.name).toLowerCase();
+        if (!PROJECT_IMAGE_EXTENSIONS.has(extension)) {
+            continue;
+        }
+
+        collectedFiles.push({
+            name: path.relative(rootDirectoryPath, absolutePath).replace(/\\/g, "/"),
+            path: absolutePath,
+        });
+    }
+
+    collectedFiles.sort((leftFile, rightFile) => {
+        return leftFile.name.localeCompare(rightFile.name, "zh-CN", {
+            numeric: true,
+            sensitivity: "base",
+        });
+    });
+
+    return collectedFiles;
 }
 
 /**

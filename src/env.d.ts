@@ -23,6 +23,23 @@ interface DesktopWindowControls {
 }
 
 /**
+ * Electron 客户端额外提供的项目目录选择能力。
+ * web 环境下该能力不存在，前端需自行回退到 input 选择方案。
+ */
+interface DesktopProjectDialog {
+  selectProjectDirectory: () => Promise<
+    | {
+        directoryPath: string;
+        files: Array<{
+          name: string;
+          path: string;
+        }>;
+      }
+    | null
+  >;
+}
+
+/**
  * Electron 预加载脚本注入到渲染层的桥接对象。
  */
 interface PoprakoDesktopBridge {
@@ -33,6 +50,7 @@ interface PoprakoDesktopBridge {
     node: string;
   };
   windowControls?: DesktopWindowControls;
+  projectDialog?: DesktopProjectDialog;
 }
 
 interface Window {

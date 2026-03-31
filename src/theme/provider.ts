@@ -29,6 +29,9 @@ export type ThemeMode = "light" | "dark" | "system";
 
 const THEME_MODE_VALUES: ReadonlyArray<ThemeMode> = ["light", "dark", "system"];
 
+const APP_FONT_FAMILY =
+  '"LXGWWenKaiMono", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif';
+
 const LIGHT_THEME_TOKEN = {
   colorPrimary: "#8f66f0",
   colorInfo: "#8f66f0",
@@ -43,6 +46,7 @@ const LIGHT_THEME_TOKEN = {
   colorBorderSecondary: "#e2d7f6",
   colorText: "#2f2545",
   colorTextSecondary: "#5d4e7d",
+  fontFamily: APP_FONT_FAMILY,
 };
 
 const DARK_THEME_TOKEN = {
@@ -59,6 +63,7 @@ const DARK_THEME_TOKEN = {
   colorBorderSecondary: "#353b49",
   colorText: "#edf1f8",
   colorTextSecondary: "#a9b2c2",
+  fontFamily: APP_FONT_FAMILY,
 };
 
 const LIGHT_COMPONENT_TOKEN = {

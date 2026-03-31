@@ -43,5 +43,9 @@ contextBridge.exposeInMainWorld(
             getMaximized: () => ipcRenderer.invoke("window:is-maximized"),
             onMaximizeChanged,
         }),
+        projectDialog: Object.freeze({
+            selectProjectDirectory: () =>
+                ipcRenderer.invoke("project:select-image-directory"),
+        }),
     }),
 );

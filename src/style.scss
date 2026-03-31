@@ -1,9 +1,20 @@
 /* =========================================
  * 全局基础色板（品牌色）
  * ========================================= */
-$brand-primary: #006d77;
+$brand-primary: #b993ff;
 $brand-secondary: #83c5be;
 $brand-accent: #e29578;
+/* =========================================
+ * 全局字体
+ * ========================================= */
+@font-face {
+  font-family: "LXGWWenKaiMono";
+  src: url("/src/assets/LXGWWenKaiMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 
 /* =========================================
  * 亮色主题 token
@@ -138,6 +149,8 @@ $dark-table-border-color: rgba(78, 91, 116, 0.4);
 :root {
   --desktop-titlebar-height: 40px;
   --desktop-sidebar-width: 56px;
+  --app-font-family: "LXGWWenKaiMono", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --ant-font-family: var(--app-font-family);
 
   --brand-primary: #{$brand-primary};
   --brand-secondary: #{$brand-secondary};
@@ -290,8 +303,21 @@ body,
 #app {
   margin: 0;
   min-height: 100%;
-  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font-family);
   color: var(--text-primary);
+}
+
+input,
+textarea,
+button,
+select {
+  font-family: var(--app-font-family);
+}
+
+/* Ant Design 全量字体兜底：覆盖组件内部与 portal 弹层挂载节点。 */
+:where(.ant-app, [class^="ant-"], [class*=" ant-"]),
+:where(.ant-app, [class^="ant-"], [class*=" ant-"]) * {
+  font-family: var(--app-font-family) !important;
 }
 
 body {

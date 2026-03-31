@@ -15,7 +15,7 @@ import { useAuthStore } from "../stores/auth";
 const routes: RouteRecordRaw[] = [
   {
     path: "/",
-    redirect: "/dashboard",
+    redirect: "/workspace",
   },
   {
     path: "/login",
@@ -23,14 +23,28 @@ const routes: RouteRecordRaw[] = [
     component: () => import("../views/LoginView.vue"),
   },
   {
-    path: "/dashboard",
-    name: "dashboard",
+    path: "/workspace",
+    name: "workspace",
     component: () => import("../views/DashboardView.vue"),
   },
   {
-    path: "/file-test",
-    name: "file-test",
-    component: () => import("../views/FileTransferTestView.vue"),
+    path: "/dashboard",
+    redirect: "/workspace",
+  },
+  {
+    path: "/comic-playground",
+    name: "comic-playground",
+    component: () => import("../views/ComicPlaygroundView.vue"),
+  },
+  {
+    path: "/member-list",
+    name: "member-list",
+    component: () => import("../views/MemberListView.vue"),
+  },
+  {
+    path: "/special-symbols",
+    name: "special-symbols",
+    component: () => import("../views/SpecialSymbolsView.vue"),
   },
 ];
 
@@ -82,7 +96,7 @@ router.beforeEach((to) => {
   }
 
   if (to.path === "/login" && authStore.isLoggedIn) {
-    return "/dashboard";
+    return "/workspace";
   }
 
   return true;
