@@ -42,13 +42,18 @@
             登录并进入工作台
           </a-button>
         </a-form-item>
+        <a-form-item v-if="isDevelopmentMode">
+          <a-button block size="large" @click="enterDashboardDirectly">
+            开发模式：直接进入查看
+          </a-button>
+        </a-form-item>
       </a-form>
     </a-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { message } from "ant-design-vue";
 import { loginUser, type LoginUserArgs } from "../api/modules";
@@ -57,10 +62,29 @@ import { useAuthStore } from "../stores/auth";
 const router = useRouter();
 const authStore = useAuthStore();
 const submitting = ref(false);
+const isDevelopmentMode = import.meta.env.DEV;
+const DEVELOPMENT_PREVIEW_SESSION_KEY = "poprako_dev_preview_mode";
+const LOGIN_NO_SCROLL_CLASS_NAME = "login-no-scroll";
 const loginForm = reactive<LoginUserArgs>({
   qq: "",
   password: "",
 });
+
+/**
+ * 设置开发模式直达开关。
+ */
+function setDevelopmentPreviewModeEnabled(enabled: boolean): void {
+  if (!isDevelopmentMode) {
+    return;
+  }
+
+  if (enabled) {
+    window.sessionStorage.setItem(DEVELOPMENT_PREVIEW_SESSION_KEY, "1");
+    return;
+  }
+
+  window.sessionStorage.removeItem(DEVELOPMENT_PREVIEW_SESSION_KEY);
+}
 
 /**
  * 处理登录提交。
@@ -71,6 +95,7 @@ async function handleSubmit(): Promise<void> {
   try {
     const loginUserResult = await loginUser(loginForm);
     authStore.setAccessToken(loginUserResult.access_token);
+    setDevelopmentPreviewModeEnabled(false);
     message.success("登录成功，正在进入仪表盘");
     await router.push("/dashboard");
   } catch (error) {
@@ -80,13 +105,37 @@ async function handleSubmit(): Promise<void> {
     submitting.value = false;
   }
 }
+
+/**
+ * 开发模式下允许从登录页直接进入仪表盘，便于快速联调。
+ */
+async function enterDashboardDirectly(): Promise<void> {
+  if (!isDevelopmentMode) {
+    return;
+  }
+
+  setDevelopmentPreviewModeEnabled(true);
+  message.info("开发模式下已直接进入仪表盘");
+  await router.push("/dashboard");
+}
+
+onMounted(() => {
+  document.documentElement.classList.add(LOGIN_NO_SCROLL_CLASS_NAME);
+  document.body.classList.add(LOGIN_NO_SCROLL_CLASS_NAME);
+});
+
+onBeforeUnmount(() => {
+  document.documentElement.classList.remove(LOGIN_NO_SCROLL_CLASS_NAME);
+  document.body.classList.remove(LOGIN_NO_SCROLL_CLASS_NAME);
+});
 </script>
 
 <style scoped lang="scss">
 /* 登录页容器与背景层。 */
 .login-page {
   position: relative;
-  min-height: 100vh;
+  min-height: 100%;
+  height: 100%;
   display: grid;
   place-items: center;
   overflow: hidden;

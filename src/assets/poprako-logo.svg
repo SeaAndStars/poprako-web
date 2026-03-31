@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+    <defs>
+        <linearGradient id="poprako-blue" x1="28" y1="24" x2="102" y2="98" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#84AAFF" />
+            <stop offset="1" stop-color="#3C58E8" />
+        </linearGradient>
+        <linearGradient id="poprako-pink" x1="22" y1="32" x2="92" y2="102" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#F9CBD9" />
+            <stop offset="1" stop-color="#E88CAF" />
+        </linearGradient>
+        <linearGradient id="poprako-yellow" x1="34" y1="22" x2="108" y2="96" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#FFE98B" />
+            <stop offset="1" stop-color="#F3CB41" />
+        </linearGradient>
+        <linearGradient id="poprako-red" x1="24" y1="34" x2="100" y2="110" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#FF7F45" />
+            <stop offset="1" stop-color="#E93216" />
+        </linearGradient>
+    </defs>
+
+    <path d="M20 45L29 36L64 71L99 36L108 45L64 89L20 45Z" fill="url(#poprako-blue)" stroke="#FFFFFF" stroke-width="1.2" stroke-linejoin="round" />
+    <path d="M45 20L36 29L71 64L36 99L45 108L89 64L45 20Z" fill="url(#poprako-pink)" stroke="#FFFFFF" stroke-width="1.2" stroke-linejoin="round" />
+    <path d="M83 20L92 29L57 64L92 99L83 108L39 64L83 20Z" fill="url(#poprako-yellow)" stroke="#FFFFFF" stroke-width="1.2" stroke-linejoin="round" />
+    <path d="M20 83L29 92L64 57L99 92L108 83L64 39L20 83Z" fill="url(#poprako-red)" stroke="#FFFFFF" stroke-width="1.2" stroke-linejoin="round" />
+
+    <circle cx="64" cy="21" r="9" fill="url(#poprako-blue)" stroke="#FFFFFF" stroke-width="1.2" />
+    <circle cx="21" cy="64" r="9" fill="url(#poprako-pink)" stroke="#FFFFFF" stroke-width="1.2" />
+    <circle cx="107" cy="64" r="9" fill="url(#poprako-yellow)" stroke="#FFFFFF" stroke-width="1.2" />
+    <circle cx="64" cy="107" r="9" fill="url(#poprako-red)" stroke="#FFFFFF" stroke-width="1.2" />
+</svg>

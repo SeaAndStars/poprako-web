@@ -12,48 +12,133 @@ $light-surface: rgba(255, 255, 255, 0.88);
 $light-text-primary: #1f2937;
 $light-text-muted: #5b6473;
 $light-shadow-heavy: 0 20px 45px rgba(13, 38, 59, 0.18);
-$light-page-grad-start: #f1f5f9;
-$light-page-grad-end: #eaf4f2;
-$light-layer-primary: rgba(0, 109, 119, 0.14);
-$light-layer-accent: rgba(226, 149, 120, 0.12);
-$light-login-grad-primary: rgba(0, 109, 119, 0.18);
-$light-login-grad-accent: rgba(226, 149, 120, 0.15);
-$light-login-glow-primary: rgba(0, 109, 119, 0.3);
-$light-login-glow-accent: rgba(226, 149, 120, 0.35);
-$light-dashboard-sider-start: #0b3c49;
-$light-dashboard-sider-end: #0d5a6a;
-$light-dashboard-header: rgba(255, 255, 255, 0.86);
-$light-dashboard-header-border: rgba(13, 109, 119, 0.14);
-$light-panel-bg: rgba(255, 255, 255, 0.95);
+$light-page-grad-start: #f8f0ff;
+$light-page-grad-end: #f1e7ff;
+$light-layer-primary: rgba(181, 124, 255, 0.2);
+$light-layer-accent: rgba(255, 122, 194, 0.14);
+$light-login-grad-primary: rgba(164, 122, 255, 0.2);
+$light-login-grad-accent: rgba(255, 141, 208, 0.17);
+$light-login-glow-primary: rgba(174, 130, 255, 0.34);
+$light-login-glow-accent: rgba(255, 154, 216, 0.36);
+$light-dashboard-sider-start: #f1e8ff;
+$light-dashboard-sider-end: #e6d7ff;
+$light-dashboard-sider-line: rgba(122, 93, 178, 0.24);
+$light-dashboard-sider-icon: #6d57a8;
+$light-dashboard-sider-icon-active: #ffffff;
+$light-dashboard-sider-fill-start: #b993ff;
+$light-dashboard-sider-fill-end: #8f66f0;
+$light-dashboard-sider-hover-bg: rgba(151, 116, 219, 0.2);
+$light-dashboard-header: rgba(243, 232, 255, 0.9);
+$light-dashboard-header-border: rgba(145, 111, 200, 0.26);
+$light-panel-bg: rgba(250, 243, 255, 0.96);
+$light-panel-border: rgba(151, 116, 219, 0.2);
+$light-workspace-glass-bg: rgba(255, 255, 255, 0.38);
 $light-float-bg: rgba(255, 255, 255, 0.65);
 $light-float-shadow: 0 12px 30px rgba(22, 44, 68, 0.2);
+$light-titlebar-bg: rgba(246, 241, 252, 0.9);
+$light-titlebar-border: rgba(124, 104, 156, 0.26);
+$light-titlebar-title: #3b3150;
+$light-titlebar-control: #4b4061;
+$light-titlebar-control-hover: rgba(122, 106, 157, 0.18);
+$light-titlebar-close-hover: #e5484d;
+$light-titlebar-profile-bg: rgba(255, 255, 255, 0.24);
+$light-titlebar-profile-border: rgba(13, 109, 119, 0.2);
+$light-titlebar-profile-placeholder-bg: #d9e6ff;
+$light-titlebar-profile-placeholder-text: #2c4ebf;
+$light-titlebar-profile-name: #1d2e46;
+$light-titlebar-profile-status: #5f6f86;
+$light-scrollbar-track: rgba(15, 23, 42, 0.06);
+$light-scrollbar-thumb: rgba(22, 119, 255, 0.34);
+$light-scrollbar-thumb-hover: rgba(22, 119, 255, 0.52);
+$light-control-btn-bg: rgba(255, 255, 255, 0.62);
+$light-control-btn-border: rgba(145, 111, 200, 0.34);
+$light-control-btn-text: #4b3a72;
+$light-control-btn-bg-hover: rgba(255, 255, 255, 0.82);
+$light-control-btn-border-hover: rgba(145, 111, 200, 0.5);
+$light-control-btn-text-hover: #3f2f64;
+$light-control-btn-primary-bg: #9b73f2;
+$light-control-btn-primary-border: #9b73f2;
+$light-control-btn-primary-bg-hover: #8960ea;
+$light-control-btn-primary-border-hover: #8960ea;
+$light-control-btn-primary-text: #ffffff;
+$light-table-head-bg: rgba(241, 231, 255, 0.86);
+$light-table-head-text: #4b3a72;
+$light-table-row-bg: rgba(255, 255, 255, 0.5);
+$light-table-row-hover-bg: rgba(186, 151, 250, 0.2);
+$light-table-cell-text: #3f2f64;
+$light-table-border-color: rgba(145, 111, 200, 0.24);
 
 /* =========================================
  * 暗黑主题 token
  * ========================================= */
-$dark-surface: rgba(20, 24, 33, 0.86);
-$dark-text-primary: #e6eef8;
-$dark-text-muted: #9fb0c6;
-$dark-shadow-heavy: 0 20px 45px rgba(0, 0, 0, 0.44);
-$dark-page-grad-start: #0f141c;
-$dark-page-grad-end: #111d29;
-$dark-layer-primary: rgba(0, 109, 119, 0.26);
-$dark-layer-accent: rgba(226, 149, 120, 0.2);
-$dark-login-grad-primary: rgba(0, 109, 119, 0.25);
-$dark-login-grad-accent: rgba(226, 149, 120, 0.2);
-$dark-login-card-bg: rgba(18, 23, 31, 0.86);
-$dark-dashboard-sider-start: #0a2630;
-$dark-dashboard-sider-end: #11394a;
-$dark-dashboard-header: rgba(15, 20, 30, 0.86);
-$dark-dashboard-header-border: rgba(79, 107, 138, 0.28);
-$dark-panel-bg: rgba(20, 26, 36, 0.88);
-$dark-float-bg: rgba(24, 24, 24, 0.72);
-$dark-float-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+$dark-surface: rgba(20, 24, 30, 0.72);
+$dark-text-primary: #edf2f9;
+$dark-text-muted: #9da8bb;
+$dark-shadow-heavy: 0 18px 38px rgba(0, 0, 0, 0.42);
+$dark-page-grad-start: #040506;
+$dark-page-grad-end: #0c0f14;
+$dark-layer-primary: rgba(124, 94, 181, 0.14);
+$dark-layer-accent: rgba(71, 137, 255, 0.1);
+$dark-login-grad-primary: rgba(126, 93, 196, 0.32);
+$dark-login-grad-accent: rgba(211, 112, 186, 0.26);
+$dark-login-glow-primary: rgba(148, 106, 229, 0.42);
+$dark-login-glow-accent: rgba(224, 124, 198, 0.32);
+$dark-login-card-bg: rgba(13, 16, 22, 0.9);
+$dark-dashboard-sider-start: rgba(12, 14, 19, 0.96);
+$dark-dashboard-sider-end: rgba(16, 20, 27, 0.96);
+$dark-dashboard-sider-line: rgba(107, 119, 140, 0.28);
+$dark-dashboard-sider-icon: rgba(225, 232, 244, 0.82);
+$dark-dashboard-sider-icon-active: #ffffff;
+$dark-dashboard-sider-fill-start: rgba(88, 106, 255, 0.92);
+$dark-dashboard-sider-fill-end: rgba(132, 105, 255, 0.9);
+$dark-dashboard-sider-hover-bg: rgba(118, 133, 172, 0.24);
+$dark-dashboard-header: rgba(15, 19, 26, 0.8);
+$dark-dashboard-header-border: rgba(82, 94, 116, 0.38);
+$dark-panel-bg: rgba(19, 24, 33, 0.74);
+$dark-panel-border: rgba(72, 84, 105, 0.4);
+$dark-workspace-glass-bg: rgba(18, 22, 30, 0.52);
+$dark-float-bg: rgba(19, 24, 33, 0.72);
+$dark-float-shadow: 0 12px 30px rgba(0, 0, 0, 0.46);
+$dark-titlebar-bg: rgba(11, 14, 20, 0.9);
+$dark-titlebar-border: rgba(78, 90, 112, 0.34);
+$dark-titlebar-title: #edf2f9;
+$dark-titlebar-control: #e8eef9;
+$dark-titlebar-control-hover: rgba(107, 122, 148, 0.28);
+$dark-titlebar-close-hover: #f05d5e;
+$dark-titlebar-profile-bg: rgba(255, 255, 255, 0.08);
+$dark-titlebar-profile-border: rgba(118, 133, 157, 0.3);
+$dark-titlebar-profile-placeholder-bg: rgba(89, 109, 153, 0.3);
+$dark-titlebar-profile-placeholder-text: #d5deef;
+$dark-titlebar-profile-name: #edf2f9;
+$dark-titlebar-profile-status: #acb8cc;
+$dark-scrollbar-track: rgba(255, 255, 255, 0.08);
+$dark-scrollbar-thumb: rgba(177, 192, 218, 0.3);
+$dark-scrollbar-thumb-hover: rgba(202, 215, 239, 0.46);
+$dark-control-btn-bg: rgba(40, 48, 63, 0.8);
+$dark-control-btn-border: rgba(92, 108, 136, 0.42);
+$dark-control-btn-text: #e9effb;
+$dark-control-btn-bg-hover: rgba(48, 57, 74, 0.9);
+$dark-control-btn-border-hover: rgba(125, 142, 171, 0.62);
+$dark-control-btn-text-hover: #ffffff;
+$dark-control-btn-primary-bg: #6079e7;
+$dark-control-btn-primary-border: #6079e7;
+$dark-control-btn-primary-bg-hover: #7690ff;
+$dark-control-btn-primary-border-hover: #7690ff;
+$dark-control-btn-primary-text: #f8fbff;
+$dark-table-head-bg: rgba(31, 37, 49, 0.96);
+$dark-table-head-text: #eaf0fb;
+$dark-table-row-bg: rgba(19, 24, 34, 0.7);
+$dark-table-row-hover-bg: rgba(46, 55, 72, 0.84);
+$dark-table-cell-text: #e6edf9;
+$dark-table-border-color: rgba(78, 91, 116, 0.4);
 
 /* =========================================
  * 运行时 CSS 变量（亮色默认）
  * ========================================= */
 :root {
+  --desktop-titlebar-height: 40px;
+  --desktop-sidebar-width: 56px;
+
   --brand-primary: #{$brand-primary};
   --brand-secondary: #{$brand-secondary};
   --brand-accent: #{$brand-accent};
@@ -75,12 +160,53 @@ $dark-float-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
 
   --dashboard-sider-start: #{$light-dashboard-sider-start};
   --dashboard-sider-end: #{$light-dashboard-sider-end};
+  --dashboard-sider-line: #{$light-dashboard-sider-line};
+  --dashboard-sider-icon: #{$light-dashboard-sider-icon};
+  --dashboard-sider-icon-active: #{$light-dashboard-sider-icon-active};
+  --dashboard-sider-fill-start: #{$light-dashboard-sider-fill-start};
+  --dashboard-sider-fill-end: #{$light-dashboard-sider-fill-end};
+  --dashboard-sider-hover-bg: #{$light-dashboard-sider-hover-bg};
   --dashboard-header-bg: #{$light-dashboard-header};
   --dashboard-header-border: #{$light-dashboard-header-border};
   --panel-bg: #{$light-panel-bg};
+  --panel-border: #{$light-panel-border};
+  --workspace-glass-bg: #{$light-workspace-glass-bg};
 
   --float-bg: #{$light-float-bg};
   --float-shadow: #{$light-float-shadow};
+  --titlebar-bg: #{$light-titlebar-bg};
+  --titlebar-border: #{$light-titlebar-border};
+  --titlebar-title: #{$light-titlebar-title};
+  --titlebar-control: #{$light-titlebar-control};
+  --titlebar-control-hover: #{$light-titlebar-control-hover};
+  --titlebar-close-hover: #{$light-titlebar-close-hover};
+  --titlebar-profile-bg: #{$light-titlebar-profile-bg};
+  --titlebar-profile-border: #{$light-titlebar-profile-border};
+  --titlebar-profile-placeholder-bg: #{$light-titlebar-profile-placeholder-bg};
+  --titlebar-profile-placeholder-text: #{$light-titlebar-profile-placeholder-text};
+  --titlebar-profile-name: #{$light-titlebar-profile-name};
+  --titlebar-profile-status: #{$light-titlebar-profile-status};
+  --app-scrollbar-track: #{$light-scrollbar-track};
+  --app-scrollbar-thumb: #{$light-scrollbar-thumb};
+  --app-scrollbar-thumb-hover: #{$light-scrollbar-thumb-hover};
+
+  --control-btn-bg: #{$light-control-btn-bg};
+  --control-btn-border: #{$light-control-btn-border};
+  --control-btn-text: #{$light-control-btn-text};
+  --control-btn-bg-hover: #{$light-control-btn-bg-hover};
+  --control-btn-border-hover: #{$light-control-btn-border-hover};
+  --control-btn-text-hover: #{$light-control-btn-text-hover};
+  --control-btn-primary-bg: #{$light-control-btn-primary-bg};
+  --control-btn-primary-border: #{$light-control-btn-primary-border};
+  --control-btn-primary-bg-hover: #{$light-control-btn-primary-bg-hover};
+  --control-btn-primary-border-hover: #{$light-control-btn-primary-border-hover};
+  --control-btn-primary-text: #{$light-control-btn-primary-text};
+  --table-head-bg: #{$light-table-head-bg};
+  --table-head-text: #{$light-table-head-text};
+  --table-row-bg: #{$light-table-row-bg};
+  --table-row-hover-bg: #{$light-table-row-hover-bg};
+  --table-cell-text: #{$light-table-cell-text};
+  --table-border-color: #{$light-table-border-color};
   --logo-text: #ffffff;
 }
 
@@ -100,16 +226,59 @@ html[data-theme="dark"] {
 
   --login-grad-primary: #{$dark-login-grad-primary};
   --login-grad-accent: #{$dark-login-grad-accent};
+  --login-glow-primary: #{$dark-login-glow-primary};
+  --login-glow-accent: #{$dark-login-glow-accent};
   --login-card-bg: #{$dark-login-card-bg};
 
   --dashboard-sider-start: #{$dark-dashboard-sider-start};
   --dashboard-sider-end: #{$dark-dashboard-sider-end};
+  --dashboard-sider-line: #{$dark-dashboard-sider-line};
+  --dashboard-sider-icon: #{$dark-dashboard-sider-icon};
+  --dashboard-sider-icon-active: #{$dark-dashboard-sider-icon-active};
+  --dashboard-sider-fill-start: #{$dark-dashboard-sider-fill-start};
+  --dashboard-sider-fill-end: #{$dark-dashboard-sider-fill-end};
+  --dashboard-sider-hover-bg: #{$dark-dashboard-sider-hover-bg};
   --dashboard-header-bg: #{$dark-dashboard-header};
   --dashboard-header-border: #{$dark-dashboard-header-border};
   --panel-bg: #{$dark-panel-bg};
+  --panel-border: #{$dark-panel-border};
+  --workspace-glass-bg: #{$dark-workspace-glass-bg};
 
   --float-bg: #{$dark-float-bg};
   --float-shadow: #{$dark-float-shadow};
+  --titlebar-bg: #{$dark-titlebar-bg};
+  --titlebar-border: #{$dark-titlebar-border};
+  --titlebar-title: #{$dark-titlebar-title};
+  --titlebar-control: #{$dark-titlebar-control};
+  --titlebar-control-hover: #{$dark-titlebar-control-hover};
+  --titlebar-close-hover: #{$dark-titlebar-close-hover};
+  --titlebar-profile-bg: #{$dark-titlebar-profile-bg};
+  --titlebar-profile-border: #{$dark-titlebar-profile-border};
+  --titlebar-profile-placeholder-bg: #{$dark-titlebar-profile-placeholder-bg};
+  --titlebar-profile-placeholder-text: #{$dark-titlebar-profile-placeholder-text};
+  --titlebar-profile-name: #{$dark-titlebar-profile-name};
+  --titlebar-profile-status: #{$dark-titlebar-profile-status};
+  --app-scrollbar-track: #{$dark-scrollbar-track};
+  --app-scrollbar-thumb: #{$dark-scrollbar-thumb};
+  --app-scrollbar-thumb-hover: #{$dark-scrollbar-thumb-hover};
+
+  --control-btn-bg: #{$dark-control-btn-bg};
+  --control-btn-border: #{$dark-control-btn-border};
+  --control-btn-text: #{$dark-control-btn-text};
+  --control-btn-bg-hover: #{$dark-control-btn-bg-hover};
+  --control-btn-border-hover: #{$dark-control-btn-border-hover};
+  --control-btn-text-hover: #{$dark-control-btn-text-hover};
+  --control-btn-primary-bg: #{$dark-control-btn-primary-bg};
+  --control-btn-primary-border: #{$dark-control-btn-primary-border};
+  --control-btn-primary-bg-hover: #{$dark-control-btn-primary-bg-hover};
+  --control-btn-primary-border-hover: #{$dark-control-btn-primary-border-hover};
+  --control-btn-primary-text: #{$dark-control-btn-primary-text};
+  --table-head-bg: #{$dark-table-head-bg};
+  --table-head-text: #{$dark-table-head-text};
+  --table-row-bg: #{$dark-table-row-bg};
+  --table-row-hover-bg: #{$dark-table-row-hover-bg};
+  --table-cell-text: #{$dark-table-cell-text};
+  --table-border-color: #{$dark-table-border-color};
 }
 
 * {
@@ -132,6 +301,62 @@ body {
     radial-gradient(circle at 80% 0%, var(--layer-accent), transparent 35%),
     linear-gradient(180deg, var(--page-grad-start) 0%, var(--page-grad-end) 100%);
   transition: background 0.28s ease;
+}
+
+/* 登录页强制禁滚动，避免鼠标滚轮推动页面。 */
+html.login-no-scroll,
+body.login-no-scroll {
+  overflow: hidden;
+}
+
+/* 全端统一滚动条外观，避免出现系统原生样式。 */
+html,
+body,
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-scrollbar-thumb) var(--app-scrollbar-track);
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  background: var(--app-scrollbar-track);
+  border-radius: 999px;
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  background-color: var(--app-scrollbar-thumb);
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--app-scrollbar-thumb-hover);
+}
+
+/* Electron 桌面环境下隐藏右侧滚动条视觉。 */
+html.desktop-shell,
+body.desktop-shell {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html.desktop-shell::-webkit-scrollbar,
+body.desktop-shell::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .page-enter-active,

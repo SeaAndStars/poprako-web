@@ -10,3 +10,31 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/**
+ * Electron 自定义标题栏可调用的窗口控制 API。
+ */
+interface DesktopWindowControls {
+  minimize: () => void;
+  toggleMaximize: () => void;
+  close: () => void;
+  getMaximized: () => Promise<boolean>;
+  onMaximizeChanged: (callback: (isMaximized: boolean) => void) => () => void;
+}
+
+/**
+ * Electron 预加载脚本注入到渲染层的桥接对象。
+ */
+interface PoprakoDesktopBridge {
+  platform: string;
+  versions: {
+    electron: string;
+    chrome: string;
+    node: string;
+  };
+  windowControls?: DesktopWindowControls;
+}
+
+interface Window {
+  poprakoDesktop?: PoprakoDesktopBridge;
+}

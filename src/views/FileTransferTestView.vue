@@ -394,7 +394,8 @@ watch(selectedTeamID, () => {
 
 <style scoped lang="scss">
 .file-test-page {
-  min-height: 100vh;
+  /* 与主内容容器对齐，避免额外叠加 100vh 导致滚动异常。 */
+  min-height: 100%;
   padding: 16px;
 }
 

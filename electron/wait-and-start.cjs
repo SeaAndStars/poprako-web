@@ -70,7 +70,7 @@ async function main() {
     try {
         await waitOn({
             resources: [waitResource],
-            timeout: 120 _000,
+            timeout: 120000,
             validateStatus: (statusCode) => statusCode >= 200 && statusCode < 500,
         });
     } catch (error) {

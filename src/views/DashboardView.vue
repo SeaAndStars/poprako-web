@@ -1,145 +1,82 @@
 <template>
-  <a-layout class="dashboard-layout">
-    <a-layout-sider
-      v-model:collapsed="collapsed"
-      :trigger="null"
-      collapsible
-      class="dashboard-sider"
-    >
-      <div class="logo">Poprako</div>
-      <a-menu
-        v-model:selectedKeys="selectedMenuKeys"
-        theme="dark"
-        mode="inline"
-        :items="menuItems"
-        @click="handleMenuClick"
-      />
-    </a-layout-sider>
+  <div class="dashboard-layout">
+    <header class="dashboard-header">
+      <div class="header-left">
+        <span class="header-title">协作仪表盘</span>
+        <span class="header-subtitle">Workset Overview</span>
+      </div>
+      <a-space>
+        <a-button :loading="loading" @click="refreshAllData">刷新数据</a-button>
+      </a-space>
+    </header>
 
-    <a-layout>
-      <a-layout-header class="dashboard-header">
-        <div class="header-left">
-          <a-button type="text" @click="toggleSider">
-            <template #icon>
-              <MenuUnfoldOutlined v-if="collapsed" />
-              <MenuFoldOutlined v-else />
-            </template>
-          </a-button>
-          <span class="header-title">高阶协作仪表盘</span>
-        </div>
-        <a-space>
-          <a-button :loading="loading" @click="refreshAllData"
-            >刷新数据</a-button
-          >
-          <a-button danger @click="logout">退出登录</a-button>
-        </a-space>
-      </a-layout-header>
+    <main class="dashboard-content">
+      <a-row :gutter="16" class="summary-row">
+        <a-col
+          v-for="summaryCard in summaryCards"
+          :key="summaryCard.label"
+          :xs="24"
+          :md="12"
+          :xl="6"
+        >
+          <a-card class="summary-card" :bordered="false">
+            <a-statistic
+              :title="summaryCard.label"
+              :value="summaryCard.value"
+            />
+          </a-card>
+        </a-col>
+      </a-row>
 
-      <a-layout-content class="dashboard-content">
-        <a-row :gutter="16" class="summary-row">
-          <a-col
-            v-for="summaryCard in summaryCards"
-            :key="summaryCard.label"
-            :xs="24"
-            :md="12"
-            :xl="6"
-          >
-            <a-card class="summary-card" :bordered="false">
-              <a-statistic
-                :title="summaryCard.label"
-                :value="summaryCard.value"
-              />
-            </a-card>
-          </a-col>
-        </a-row>
-
-        <a-row :gutter="16">
-          <a-col :xs="24" :xl="14">
-            <a-card title="我的汉化组" :bordered="false" class="panel-card">
-              <a-table
-                :columns="teamColumns"
-                :data-source="teams"
-                row-key="id"
-                :pagination="false"
-                size="middle"
-              />
-            </a-card>
-          </a-col>
-          <a-col :xs="24" :xl="10">
-            <a-card title="我的分配" :bordered="false" class="panel-card">
-              <a-list
-                :data-source="assignments"
-                :locale="{ emptyText: '暂无分配' }"
-              >
-                <template #renderItem="{ item }">
-                  <a-list-item>
-                    <a-list-item-meta :description="`章节：${item.chapter_id}`">
-                      <template #title>
-                        <a-space>
-                          <span>{{ item.id }}</span>
-                          <a-tag :color="getRoleTagColor(item.role)">{{
-                            item.role
-                          }}</a-tag>
-                        </a-space>
-                      </template>
-                    </a-list-item-meta>
-                  </a-list-item>
-                </template>
-              </a-list>
-            </a-card>
-          </a-col>
-        </a-row>
-      </a-layout-content>
-    </a-layout>
-  </a-layout>
+      <a-row :gutter="16">
+        <a-col :xs="24" :xl="14">
+          <a-card title="我的汉化组" :bordered="false" class="panel-card">
+            <a-table
+              :columns="teamColumns"
+              :data-source="teams"
+              row-key="id"
+              :pagination="false"
+              size="middle"
+            />
+          </a-card>
+        </a-col>
+        <a-col :xs="24" :xl="10">
+          <a-card title="我的分配" :bordered="false" class="panel-card">
+            <a-list
+              :data-source="assignments"
+              :locale="{ emptyText: '暂无分配' }"
+            >
+              <template #renderItem="{ item }">
+                <a-list-item>
+                  <a-list-item-meta :description="`章节：${item.chapter_id}`">
+                    <template #title>
+                      <a-space>
+                        <span>{{ item.id }}</span>
+                        <a-tag :color="getRoleTagColor(item.role)">{{
+                          item.role
+                        }}</a-tag>
+                      </a-space>
+                    </template>
+                  </a-list-item-meta>
+                </a-list-item>
+              </template>
+            </a-list>
+          </a-card>
+        </a-col>
+      </a-row>
+    </main>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
-import { message, type MenuProps, type TableColumnsType } from "ant-design-vue";
-import {
-  AppstoreOutlined,
-  BarsOutlined,
-  CloudUploadOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  TeamOutlined,
-} from "@ant-design/icons-vue";
+import { computed, onMounted, ref } from "vue";
+import { message, type TableColumnsType } from "ant-design-vue";
 import { getMyAssignments, getMyTeams } from "../api/modules";
-import { useAuthStore } from "../stores/auth";
 import type { AssignmentInfo, TeamInfo } from "../types/domain";
 
-const router = useRouter();
-const authStore = useAuthStore();
-const collapsed = ref(false);
 const loading = ref(false);
 const teams = ref<TeamInfo[]>([]);
 const assignments = ref<AssignmentInfo[]>([]);
-const selectedMenuKeys = ref<string[]>(["dashboard"]);
-
-const menuItems: MenuProps["items"] = [
-  {
-    key: "dashboard",
-    label: "仪表盘",
-    icon: () => h(AppstoreOutlined),
-  },
-  {
-    key: "team",
-    label: "团队概览",
-    icon: () => h(TeamOutlined),
-  },
-  {
-    key: "assignment",
-    label: "任务分配",
-    icon: () => h(BarsOutlined),
-  },
-  {
-    key: "file-test",
-    label: "文件测试",
-    icon: () => h(CloudUploadOutlined),
-  },
-];
 
 const teamColumns: TableColumnsType<TeamInfo> = [
   {
@@ -188,33 +125,6 @@ const summaryCards = computed(() => [
 ]);
 
 /**
- * 切换侧边栏折叠状态。
- */
-function toggleSider(): void {
-  collapsed.value = !collapsed.value;
-}
-
-/**
- * 处理菜单点击行为。
- * 当前示例页面仅保留仪表盘入口，其他菜单通过提示说明。
- */
-function handleMenuClick(menuInfo: { key: string }): void {
-  selectedMenuKeys.value = [menuInfo.key];
-
-  if (menuInfo.key === "dashboard") {
-    router.push("/dashboard");
-    return;
-  }
-
-  if (menuInfo.key === "file-test") {
-    router.push("/file-test");
-    return;
-  }
-
-  message.info("该菜单页可按同样模式继续扩展");
-}
-
-/**
  * 拉取仪表盘依赖数据。
  * 该方法串行加载团队与分配数据，保证页面统计一致。
  */
@@ -237,14 +147,6 @@ async function refreshAllData(): Promise<void> {
   } finally {
     loading.value = false;
   }
-}
-
-/**
- * 执行退出登录并返回登录页。
- */
-async function logout(): Promise<void> {
-  authStore.clearAccessToken();
-  await router.push("/login");
 }
 
 /**
@@ -283,31 +185,16 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-/* 仪表盘基础布局。 */
+/* 仪表盘页面布局：仅保留业务头部与内容容器。 */
 .dashboard-layout {
-  min-height: 100vh;
-}
-
-/* 侧边栏背景统一走全局变量。 */
-.dashboard-sider {
-  background: linear-gradient(
-    180deg,
-    var(--dashboard-sider-start),
-    var(--dashboard-sider-end)
-  );
-}
-
-.logo {
-  height: 64px;
-  color: var(--logo-text);
-  font-size: 20px;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
-  letter-spacing: 0.08em;
+  height: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .dashboard-header {
+  min-height: 56px;
   background: var(--dashboard-header-bg);
   backdrop-filter: blur(8px);
   display: flex;
@@ -320,7 +207,7 @@ onMounted(async () => {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .header-title {
@@ -328,7 +215,15 @@ onMounted(async () => {
   font-weight: 600;
 }
 
+.header-subtitle {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .dashboard-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   padding: 20px;
 }
 
@@ -339,12 +234,47 @@ onMounted(async () => {
 .summary-card {
   border-radius: 14px;
   background: var(--surface);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(14px) saturate(118%);
 }
 
 .panel-card {
   border-radius: 16px;
   margin-bottom: 16px;
   background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(16px) saturate(120%);
+}
+
+:global(.dashboard-layout .ant-card-head) {
+  border-bottom: 1px solid var(--table-border-color);
+}
+
+:global(.dashboard-layout .ant-card-head-title) {
+  color: var(--text-primary);
+}
+
+:global(.dashboard-layout .ant-statistic-title) {
+  color: var(--text-muted);
+}
+
+:global(.dashboard-layout .ant-statistic-content) {
+  color: var(--text-primary);
+}
+
+:global(.dashboard-layout .ant-list-item) {
+  border-bottom: 1px solid var(--table-border-color);
+}
+
+:global(.dashboard-layout .ant-list-item-meta-title),
+:global(.dashboard-layout .ant-list-item-meta-description) {
+  color: var(--text-primary);
+}
+
+@media (max-width: 900px) {
+  .header-subtitle {
+    display: none;
+  }
 }
 
 :global(html[data-theme="dark"]) {

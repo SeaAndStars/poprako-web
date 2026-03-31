@@ -17,6 +17,34 @@ interface ApiResponseEnvelope<T> {
   data?: T;
 }
 
+/**
+ * 当前是否运行在开发模式。
+ */
+const isDevelopmentMode = import.meta.env.DEV;
+const DEVELOPMENT_PREVIEW_SESSION_KEY = "poprako_dev_preview_mode";
+
+/**
+ * 当前是否已开启开发模式直达查看。
+ */
+function isDevelopmentPreviewModeEnabled(): boolean {
+  if (!isDevelopmentMode) {
+    return false;
+  }
+
+  return window.sessionStorage.getItem(DEVELOPMENT_PREVIEW_SESSION_KEY) === "1";
+}
+
+/**
+ * 判断当前是否已在登录页面，兼容 history 与 hash 两种路由模式。
+ */
+function isOnLoginRoute(): boolean {
+  if (location.pathname === "/login") {
+    return true;
+  }
+
+  return location.hash.endsWith("/login");
+}
+
 function resolveApiBaseURL(): string {
   const configuredBaseURL = import.meta.env.VITE_API_BASE_URL?.trim();
   if (configuredBaseURL) {
@@ -88,7 +116,12 @@ class ApiHttpClient {
 
     if (statusCode === 401) {
       localStorage.removeItem("access_token");
-      if (location.pathname !== "/login") {
+
+      // 仅当明确开启开发直达模式时，允许保留当前页面联调。
+      if (
+        (!isDevelopmentMode || !isDevelopmentPreviewModeEnabled()) &&
+        !isOnLoginRoute()
+      ) {
         location.href = "/login";
       }
     }
