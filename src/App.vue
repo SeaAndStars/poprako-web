@@ -22,7 +22,13 @@
           />
         </aside>
 
-        <main class="application-shell__content-container">
+        <main
+          class="application-shell__content-container"
+          :class="{
+            'application-shell__content-container--full-bleed':
+              showFullBleedContent,
+          }"
+        >
           <router-view />
         </main>
       </div>
@@ -46,8 +52,13 @@ const route = useRoute();
 const isDesktopEnvironment = computed(() =>
   Boolean(window.poprakoDesktop?.windowControls),
 );
+const isLoginRoute = computed(() => route.name === "login");
+const isTranslatorRoute = computed(() => route.name === "translator");
 const showTitlebar = computed(() => true);
-const showSidebar = computed(() => route.path !== "/login");
+const showSidebar = computed(
+  () => !isLoginRoute.value && !isTranslatorRoute.value,
+);
+const showFullBleedContent = computed(() => !showSidebar.value);
 const DESKTOP_SHELL_CLASS_NAME = "desktop-shell";
 
 onMounted(() => {
@@ -139,6 +150,11 @@ onBeforeUnmount(() => {
   background: var(--workspace-glass-bg);
   backdrop-filter: blur(16px) saturate(120%);
   border-top-right-radius: 8px;
+}
+
+.application-shell__workspace-container--desktop
+  .application-shell__content-container--full-bleed {
+  border-top-left-radius: 8px;
 }
 
 /* 全局提示层统一抬高并下移，避免被标题栏遮挡。 */

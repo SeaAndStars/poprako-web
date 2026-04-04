@@ -53,7 +53,10 @@
         </a-col>
       </a-row>
 
-      <section v-if="filteredProjects.length > 0" class="workspace-project-grid">
+      <section
+        v-if="filteredProjects.length > 0"
+        class="workspace-project-grid"
+      >
         <div
           v-for="projectRecord in filteredProjects"
           :key="projectRecord.id"

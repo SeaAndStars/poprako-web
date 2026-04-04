@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld(
         projectDialog: Object.freeze({
             selectProjectDirectory: () =>
                 ipcRenderer.invoke("project:select-image-directory"),
+            readImageFile: (filePath) =>
+                ipcRenderer.invoke("project:read-image-file", filePath),
         }),
     }),
 );

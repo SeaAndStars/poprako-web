@@ -28,6 +28,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import("../views/DashboardView.vue"),
   },
   {
+    path: "/translator/:projectId",
+    name: "translator",
+    component: () => import("../views/TranslatorView.vue"),
+  },
+  {
     path: "/dashboard",
     redirect: "/workspace",
   },

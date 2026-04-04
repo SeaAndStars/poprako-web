@@ -36,6 +36,7 @@ export default [{
             ...js.configs.recommended.rules,
             ...tsPlugin.configs.recommended.rules,
             ...vuePlugin.configs['vue3-recommended'].rules,
+            'no-undef': 'off',
             'vue/multi-word-component-names': 'off',
             '@typescript-eslint/no-explicit-any': 'off',
         },

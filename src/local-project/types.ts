@@ -46,6 +46,10 @@ export interface LocalProjectUnit {
   x_coord: number;
   /** 归一化纵坐标，范围为 0 到 1。 */
   y_coord: number;
+  /** 归一化框宽，范围为 0 到 1。 */
+  box_width_ratio: number;
+  /** 归一化框高，范围为 0 到 1。 */
+  box_height_ratio: number;
   /** 是否为框内文本。 */
   is_bubble: boolean;
   /** 是否已完成校对。 */
@@ -58,6 +62,90 @@ export interface LocalProjectUnit {
   translator_comment: string;
   /** 校对备注。 */
   proofreader_comment: string;
+}
+
+export const MIN_LOCAL_PROJECT_UNIT_BOX_WIDTH_RATIO = 0.04;
+export const MIN_LOCAL_PROJECT_UNIT_BOX_HEIGHT_RATIO = 0.04;
+export const MAX_LOCAL_PROJECT_UNIT_BOX_WIDTH_RATIO = 0.9;
+export const MAX_LOCAL_PROJECT_UNIT_BOX_HEIGHT_RATIO = 0.9;
+
+type LocalProjectUnitGeometryCompatible = Omit<
+  LocalProjectUnit,
+  "box_width_ratio" | "box_height_ratio"
+> &
+  Partial<Pick<LocalProjectUnit, "box_width_ratio" | "box_height_ratio">>;
+
+/**
+ * 为不同类型的文本框提供默认尺寸。
+ * 框内文本通常更大，框外说明文本保持更紧凑的默认框。
+ */
+export function getDefaultLocalProjectUnitBoxSize(
+  isBubble: boolean,
+): Pick<LocalProjectUnit, "box_width_ratio" | "box_height_ratio"> {
+  if (isBubble) {
+    return {
+      box_width_ratio: 0.18,
+      box_height_ratio: 0.1,
+    };
+  }
+
+  return {
+    box_width_ratio: 0.14,
+    box_height_ratio: 0.08,
+  };
+}
+
+/**
+ * 将值限制在指定归一化区间内。
+ */
+function clampNormalizedValue(
+  rawValue: number,
+  minValue: number,
+  maxValue: number,
+): number {
+  if (!Number.isFinite(rawValue)) {
+    return minValue;
+  }
+
+  return Math.max(minValue, Math.min(maxValue, rawValue));
+}
+
+/**
+ * 为新旧数据统一补齐并修正文本框几何信息。
+ * 旧项目没有尺寸字段时，会按框内/框外类型回填默认尺寸。
+ */
+export function normalizeLocalProjectUnitGeometry(
+  projectUnit: LocalProjectUnitGeometryCompatible,
+): LocalProjectUnit {
+  const defaultBoxSize = getDefaultLocalProjectUnitBoxSize(
+    projectUnit.is_bubble,
+  );
+  const boxWidthRatio = clampNormalizedValue(
+    projectUnit.box_width_ratio ?? defaultBoxSize.box_width_ratio,
+    MIN_LOCAL_PROJECT_UNIT_BOX_WIDTH_RATIO,
+    MAX_LOCAL_PROJECT_UNIT_BOX_WIDTH_RATIO,
+  );
+  const boxHeightRatio = clampNormalizedValue(
+    projectUnit.box_height_ratio ?? defaultBoxSize.box_height_ratio,
+    MIN_LOCAL_PROJECT_UNIT_BOX_HEIGHT_RATIO,
+    MAX_LOCAL_PROJECT_UNIT_BOX_HEIGHT_RATIO,
+  );
+
+  return {
+    ...projectUnit,
+    x_coord: clampNormalizedValue(
+      projectUnit.x_coord,
+      boxWidthRatio / 2,
+      1 - boxWidthRatio / 2,
+    ),
+    y_coord: clampNormalizedValue(
+      projectUnit.y_coord,
+      boxHeightRatio / 2,
+      1 - boxHeightRatio / 2,
+    ),
+    box_width_ratio: boxWidthRatio,
+    box_height_ratio: boxHeightRatio,
+  };
 }
 
 /**

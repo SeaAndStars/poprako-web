@@ -123,6 +123,29 @@ function registerWindowControlHandlers() {
             files,
         };
     });
+
+    /**
+     * 读取本地图片文件并以 data URL 返回给渲染层。
+     * 用于解决开发模式 (http://localhost) 无法直接引用 file:// 资源的问题。
+     */
+    ipcMain.handle("project:read-image-file", async (_event, filePath) => {
+        try {
+            const fileBuffer = await fs.readFile(filePath);
+            const fileExtension = path.extname(filePath).toLowerCase();
+            const extensionToMimeType = {
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".webp": "image/webp",
+                ".gif": "image/gif",
+                ".bmp": "image/bmp",
+            };
+            const mimeType = extensionToMimeType[fileExtension] || "image/jpeg";
+            return `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
+        } catch {
+            return null;
+        }
+    });
 }
 
 /**

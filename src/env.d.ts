@@ -27,16 +27,14 @@ interface DesktopWindowControls {
  * web 环境下该能力不存在，前端需自行回退到 input 选择方案。
  */
 interface DesktopProjectDialog {
-  selectProjectDirectory: () => Promise<
-    | {
-        directoryPath: string;
-        files: Array<{
-          name: string;
-          path: string;
-        }>;
-      }
-    | null
-  >;
+  selectProjectDirectory: () => Promise<{
+    directoryPath: string;
+    files: Array<{
+      name: string;
+      path: string;
+    }>;
+  } | null>;
+  readImageFile: (filePath: string) => Promise<string | null>;
 }
 
 /**

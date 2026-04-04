@@ -18,19 +18,27 @@
 
       <div class="local-project-card__metrics">
         <div class="local-project-card__metric-item">
-          <span class="local-project-card__metric-value">{{ project.page_count }}</span>
+          <span class="local-project-card__metric-value">{{
+            project.page_count
+          }}</span>
           <span class="local-project-card__metric-label">页数</span>
         </div>
         <div class="local-project-card__metric-item">
-          <span class="local-project-card__metric-value">{{ project.unit_count }}</span>
+          <span class="local-project-card__metric-value">{{
+            project.unit_count
+          }}</span>
           <span class="local-project-card__metric-label">标记</span>
         </div>
         <div class="local-project-card__metric-item">
-          <span class="local-project-card__metric-value">{{ project.translated_unit_count }}</span>
+          <span class="local-project-card__metric-value">{{
+            project.translated_unit_count
+          }}</span>
           <span class="local-project-card__metric-label">已翻译</span>
         </div>
         <div class="local-project-card__metric-item">
-          <span class="local-project-card__metric-value">{{ project.proofread_unit_count }}</span>
+          <span class="local-project-card__metric-value">{{
+            project.proofread_unit_count
+          }}</span>
           <span class="local-project-card__metric-label">已校对</span>
         </div>
       </div>
@@ -64,7 +72,11 @@
           <a-button size="small" @click="emit('delete', project.id)">
             删除
           </a-button>
-          <a-button type="primary" size="small" @click="emit('open', project.id)">
+          <a-button
+            type="primary"
+            size="small"
+            @click="emit('open', project.id)"
+          >
             进入翻译器
           </a-button>
         </div>
@@ -94,7 +106,10 @@ const emit = defineEmits<{
 /**
  * 计算百分比时统一兜底，避免除零。
  */
-function resolveProgressPercent(completedCount: number, totalCount: number): number {
+function resolveProgressPercent(
+  completedCount: number,
+  totalCount: number,
+): number {
   if (totalCount <= 0) {
     return 0;
   }

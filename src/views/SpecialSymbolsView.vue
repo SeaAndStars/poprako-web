@@ -85,68 +85,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import { message } from "ant-design-vue";
+import { storeToRefs } from "pinia";
 import {
   AppstoreOutlined,
   QuestionCircleOutlined,
   StarOutlined,
 } from "@ant-design/icons-vue";
+import {
+  MAX_CUSTOM_SYMBOL_COUNT,
+  useSpecialSymbolsStore,
+} from "../stores/specialSymbols";
 
-interface SymbolSection {
-  key: string;
-  title: string;
-  symbols: ReadonlyArray<string>;
-}
-
-const MAX_CUSTOM_SYMBOL_COUNT = 15;
-
-const symbolSections: ReadonlyArray<SymbolSection> = [
-  {
-    key: "star-heart",
-    title: "星形与爱心",
-    symbols: ["★", "☆", "♥", "♡", "✳", "✿", "❀"],
-  },
-  {
-    key: "state",
-    title: "状态与标记",
-    symbols: ["✓", "✗", "●", "○", "×"],
-  },
-  {
-    key: "music",
-    title: "音乐符号",
-    symbols: ["♪", "♬", "♫", "♯", "♭", "♮"],
-  },
-  {
-    key: "quote",
-    title: "引号（成对）",
-    symbols: ["『』", "「」", "【】", "〈〉"],
-  },
-  {
-    key: "others",
-    title: "其他",
-    symbols: ["©", "®", "♂", "♀", "♁", "▶", "◀", "§"],
-  },
-];
-
-const customSymbols = ref<Array<string>>([
-  "★",
-  "☆",
-  "♥",
-  "♡",
-  "✳",
-  "●",
-  "○",
-  "×",
-]);
+const specialSymbolsStore = useSpecialSymbolsStore();
+const symbolSections = specialSymbolsStore.symbolSections;
+const { customSymbols, customSymbolCountLabel } =
+  storeToRefs(specialSymbolsStore);
 const editMode = ref(false);
 
-const customSymbolCountLabel = computed(
-  () => `${customSymbols.value.length}/${MAX_CUSTOM_SYMBOL_COUNT}`,
-);
-
 function isSymbolInCustom(symbolValue: string): boolean {
-  return customSymbols.value.includes(symbolValue);
+  return specialSymbolsStore.isSymbolInCustom(symbolValue);
 }
 
 function toggleEditMode(): void {
@@ -154,19 +113,11 @@ function toggleEditMode(): void {
 }
 
 function toggleSymbolInCustom(symbolValue: string): void {
-  const symbolIndex = customSymbols.value.indexOf(symbolValue);
+  const toggleResult = specialSymbolsStore.toggleCustomSymbol(symbolValue);
 
-  if (symbolIndex >= 0) {
-    customSymbols.value.splice(symbolIndex, 1);
-    return;
-  }
-
-  if (customSymbols.value.length >= MAX_CUSTOM_SYMBOL_COUNT) {
+  if (toggleResult === "limit-exceeded") {
     message.warning(`自定义表最多支持 ${MAX_CUSTOM_SYMBOL_COUNT} 个符号`);
-    return;
   }
-
-  customSymbols.value.push(symbolValue);
 }
 
 async function copySymbol(symbolValue: string): Promise<void> {
@@ -203,10 +154,7 @@ function handleMainSymbolClick(symbolValue: string): void {
 
 function handleCustomSymbolClick(symbolValue: string): void {
   if (editMode.value) {
-    const symbolIndex = customSymbols.value.indexOf(symbolValue);
-    if (symbolIndex >= 0) {
-      customSymbols.value.splice(symbolIndex, 1);
-    }
+    specialSymbolsStore.removeCustomSymbol(symbolValue);
     return;
   }
 

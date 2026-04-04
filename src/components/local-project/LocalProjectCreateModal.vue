@@ -11,7 +11,8 @@
   >
     <div class="project-create-modal">
       <p class="project-create-modal__intro">
-        选择本地图片目录后，会自动按文件顺序生成页面。Electron 客户端直接引用本地文件，web 端则写入浏览器本地存储。
+        选择本地图片目录后，会自动按文件顺序生成页面。Electron
+        客户端直接引用本地文件，web 端则写入浏览器本地存储。
       </p>
 
       <a-form layout="vertical">
@@ -56,9 +57,7 @@
       <div v-if="selectedCollection" class="project-create-modal__preview">
         <div class="project-create-modal__preview-header">
           <span>页面预览</span>
-          <span>
-            {{ selectedCollection.files.length }} 页
-          </span>
+          <span> {{ selectedCollection.files.length }} 页 </span>
         </div>
 
         <div class="project-create-modal__preview-list">
@@ -75,7 +74,11 @@
           v-if="selectedCollection.files.length > previewFiles.length"
           class="project-create-modal__preview-more"
         >
-          其余 {{ selectedCollection.files.length - previewFiles.length }} 页将在创建后自动加入项目。
+          其余
+          {{
+            selectedCollection.files.length - previewFiles.length
+          }}
+          页将在创建后自动加入项目。
         </div>
       </div>
     </div>

@@ -76,7 +76,10 @@ function readFileAsDataURL(file: File): Promise<string> {
  * 生成稳定资源 ID。
  */
 function createAssetID(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
   }
 
@@ -141,7 +144,9 @@ export async function loadWebProjectImageAsset(
       };
 
       request.onsuccess = () => {
-        resolve((request.result as LocalProjectImageAssetRecord | undefined) ?? null);
+        resolve(
+          (request.result as LocalProjectImageAssetRecord | undefined) ?? null,
+        );
       };
     },
   );
@@ -202,11 +207,37 @@ export function toElectronFileURL(rawFilePath: string): string {
 /**
  * 统一解析页面图片预览地址。
  * 调用方无需关心当前项目来自 Electron 目录还是 web 本地导入。
+ *
+ * Electron 开发模式下，页面从 http://localhost 加载，直接使用 file:// URL
+ * 会被浏览器跨源策略拦截。因此优先通过 IPC 读取文件内容并以 data URL 返回。
  */
 export async function resolveLocalProjectImageURL(
   imageSource: LocalProjectImageSource,
 ): Promise<string | null> {
   if (imageSource.kind === "electron-file") {
+    const desktopBridge = window.poprakoDesktop?.projectDialog;
+
+    if (desktopBridge?.readImageFile) {
+      try {
+        const dataURL = await desktopBridge.readImageFile(imageSource.path);
+
+        if (dataURL) {
+          return dataURL;
+        }
+
+        console.warn(
+          "[assets] IPC readImageFile 返回空值, path:",
+          imageSource.path,
+        );
+      } catch (err) {
+        console.error("[assets] IPC readImageFile 调用失败:", err);
+      }
+    } else {
+      console.warn(
+        "[assets] desktopBridge.readImageFile 不可用, 回退到 file:// URL",
+      );
+    }
+
     return toElectronFileURL(imageSource.path);
   }
 

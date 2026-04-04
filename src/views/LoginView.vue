@@ -39,12 +39,12 @@
             block
             :loading="submitting"
           >
-            登录并进入工作台
+            登录并进入工作区
           </a-button>
         </a-form-item>
         <a-form-item v-if="isDevelopmentMode">
-          <a-button block size="large" @click="enterDashboardDirectly">
-            开发模式：直接进入查看
+          <a-button block size="large" @click="enterWorkspaceDirectly">
+            开发模式：直接进入工作区
           </a-button>
         </a-form-item>
       </a-form>
@@ -88,7 +88,7 @@ function setDevelopmentPreviewModeEnabled(enabled: boolean): void {
 
 /**
  * 处理登录提交。
- * 登录成功后会缓存令牌并跳转到仪表盘页面。
+ * 登录成功后会缓存令牌并跳转到项目工作区页面。
  */
 async function handleSubmit(): Promise<void> {
   submitting.value = true;
@@ -96,8 +96,8 @@ async function handleSubmit(): Promise<void> {
     const loginUserResult = await loginUser(loginForm);
     authStore.setAccessToken(loginUserResult.access_token);
     setDevelopmentPreviewModeEnabled(false);
-    message.success("登录成功，正在进入仪表盘");
-    await router.push("/dashboard");
+    message.success("登录成功，正在进入工作区");
+    await router.push("/workspace");
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "登录失败";
     message.error(errorMessage);
@@ -107,16 +107,16 @@ async function handleSubmit(): Promise<void> {
 }
 
 /**
- * 开发模式下允许从登录页直接进入仪表盘，便于快速联调。
+ * 开发模式下允许从登录页直接进入工作区，便于快速联调。
  */
-async function enterDashboardDirectly(): Promise<void> {
+async function enterWorkspaceDirectly(): Promise<void> {
   if (!isDevelopmentMode) {
     return;
   }
 
   setDevelopmentPreviewModeEnabled(true);
-  message.info("开发模式下已直接进入仪表盘");
-  await router.push("/dashboard");
+  message.info("开发模式下已直接进入工作区");
+  await router.push("/workspace");
 }
 
 onMounted(() => {

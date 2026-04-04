@@ -6,6 +6,11 @@
 import { computed, ref, watch } from "vue";
 import { defineStore } from "pinia";
 import { deleteWebProjectImageAssets } from "../local-project/assets";
+import {
+  savePageUnits,
+  deleteProjectUnits,
+  loadPageUnits,
+} from "../local-project/database";
 import type {
   CreateLocalProjectPayload,
   LocalProjectDraftPage,
@@ -13,6 +18,7 @@ import type {
   LocalProjectRecord,
   LocalProjectUnit,
 } from "../local-project/types";
+import { normalizeLocalProjectUnitGeometry } from "../local-project/types";
 
 const LOCAL_PROJECT_STORAGE_KEY = "poprako_local_projects";
 const ACTIVE_LOCAL_PROJECT_STORAGE_KEY = "poprako_active_local_project_id";
@@ -25,7 +31,10 @@ interface PersistedLocalProjectState {
  * 生成随机 ID。
  */
 function createLocalProjectID(prefix: string): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return `${prefix}_${crypto.randomUUID()}`;
   }
 
@@ -68,7 +77,10 @@ function recalculateProjectMetrics(
         translatedCount += 1;
       }
 
-      if (projectUnit.is_proofread || hasTextContent(projectUnit.proofread_text)) {
+      if (
+        projectUnit.is_proofread ||
+        hasTextContent(projectUnit.proofread_text)
+      ) {
         proofreadCount += 1;
       }
     });
@@ -89,7 +101,9 @@ function recalculateProjectMetrics(
 /**
  * 为新建项目生成页面实体。
  */
-function createProjectPages(draftPages: LocalProjectDraftPage[]): LocalProjectPage[] {
+function createProjectPages(
+  draftPages: LocalProjectDraftPage[],
+): LocalProjectPage[] {
   return draftPages.map((draftPage, index) => ({
     id: createLocalProjectID("page"),
     index: index + 1,
@@ -97,6 +111,26 @@ function createProjectPages(draftPages: LocalProjectDraftPage[]): LocalProjectPa
     image_source: draftPage.image_source,
     units: [],
   }));
+}
+
+/**
+ * 为持久化项目补齐新版所需的文本框几何信息。
+ */
+function normalizePersistedProjectRecord(
+  projectRecord: LocalProjectRecord,
+): LocalProjectRecord {
+  const normalizedPages = projectRecord.pages.map((projectPage) => ({
+    ...projectPage,
+    units: projectPage.units.map((projectUnit, index) => ({
+      ...normalizeLocalProjectUnitGeometry(projectUnit),
+      index: index + 1,
+    })),
+  }));
+
+  return recalculateProjectMetrics({
+    ...projectRecord,
+    pages: normalizedPages,
+  });
 }
 
 /**
@@ -111,7 +145,13 @@ function loadPersistedProjects(): LocalProjectRecord[] {
 
   try {
     const parsedState = JSON.parse(rawState) as PersistedLocalProjectState;
-    return Array.isArray(parsedState.projects) ? parsedState.projects : [];
+    if (!Array.isArray(parsedState.projects)) {
+      return [];
+    }
+
+    return parsedState.projects.map((projectRecord) => {
+      return normalizePersistedProjectRecord(projectRecord);
+    });
   } catch {
     return [];
   }
@@ -135,8 +175,9 @@ export const useLocalProjectsStore = defineStore("local-projects", () => {
     }
 
     return (
-      projects.value.find((projectRecord) => projectRecord.id === activeProjectID.value) ??
-      null
+      projects.value.find(
+        (projectRecord) => projectRecord.id === activeProjectID.value,
+      ) ?? null
     );
   });
 
@@ -175,7 +216,9 @@ export const useLocalProjectsStore = defineStore("local-projects", () => {
   /**
    * 新建本地项目。
    */
-  function createProject(createPayload: CreateLocalProjectPayload): LocalProjectRecord {
+  function createProject(
+    createPayload: CreateLocalProjectPayload,
+  ): LocalProjectRecord {
     const nowISO = new Date().toISOString();
     const nextProject = recalculateProjectMetrics({
       id: createLocalProjectID("project"),
@@ -203,7 +246,9 @@ export const useLocalProjectsStore = defineStore("local-projects", () => {
    */
   function updateProjectMeta(
     projectID: string,
-    patch: Partial<Pick<LocalProjectRecord, "title" | "author" | "source_label">>,
+    patch: Partial<
+      Pick<LocalProjectRecord, "title" | "author" | "source_label">
+    >,
   ): void {
     projects.value = projects.value.map((projectRecord) => {
       if (projectRecord.id !== projectID) {
@@ -236,7 +281,10 @@ export const useLocalProjectsStore = defineStore("local-projects", () => {
 
       return {
         ...projectRecord,
-        last_page_index: Math.max(0, Math.min(nextPageIndex, projectRecord.page_count - 1)),
+        last_page_index: Math.max(
+          0,
+          Math.min(nextPageIndex, projectRecord.page_count - 1),
+        ),
         updated_at: new Date().toISOString(),
       };
     });
@@ -251,6 +299,11 @@ export const useLocalProjectsStore = defineStore("local-projects", () => {
     pageID: string,
     nextUnits: LocalProjectUnit[],
   ): void {
+    const normalizedUnits = nextUnits.map((projectUnit, index) => ({
+      ...normalizeLocalProjectUnitGeometry(projectUnit),
+      index: index + 1,
+    }));
+
     projects.value = projects.value.map((projectRecord) => {
       if (projectRecord.id !== projectID) {
         return projectRecord;
@@ -263,10 +316,7 @@ export const useLocalProjectsStore = defineStore("local-projects", () => {
 
         return {
           ...projectPage,
-          units: nextUnits.map((projectUnit, index) => ({
-            ...projectUnit,
-            index: index + 1,
-          })),
+          units: normalizedUnits,
         };
       });
 
@@ -274,6 +324,10 @@ export const useLocalProjectsStore = defineStore("local-projects", () => {
         ...projectRecord,
         pages: nextPages,
       });
+    });
+
+    savePageUnits(projectID, pageID, normalizedUnits).catch((err) => {
+      console.error("[localProjects] IndexedDB 保存翻译单元失败:", err);
     });
   }
 
@@ -295,6 +349,7 @@ export const useLocalProjectsStore = defineStore("local-projects", () => {
       .map((imageSource) => imageSource.asset_id);
 
     await deleteWebProjectImageAssets(webAssetIDs);
+    await deleteProjectUnits(projectID);
 
     projects.value = projects.value.filter(
       (projectRecord) => projectRecord.id !== projectID,
@@ -303,6 +358,33 @@ export const useLocalProjectsStore = defineStore("local-projects", () => {
     if (activeProjectID.value === projectID) {
       activeProjectID.value = null;
     }
+  }
+
+  /**
+   * 从 IndexedDB 加载指定页面的翻译单元。
+   * 若 IndexedDB 无数据则回退到内存中的 units。
+   */
+  async function loadProjectPageUnits(
+    projectID: string,
+    pageID: string,
+  ): Promise<LocalProjectUnit[]> {
+    try {
+      const dbUnits = await loadPageUnits(projectID, pageID);
+      if (dbUnits.length > 0) {
+        return dbUnits;
+      }
+    } catch (err) {
+      console.error("[localProjects] IndexedDB 读取翻译单元失败:", err);
+    }
+
+    // 回退：从内存 (localStorage) 读取
+    const targetProject = projects.value.find(
+      (projectRecord) => projectRecord.id === projectID,
+    );
+    const targetPage = targetProject?.pages.find(
+      (projectPage) => projectPage.id === pageID,
+    );
+    return targetPage?.units ?? [];
   }
 
   return {
@@ -314,6 +396,7 @@ export const useLocalProjectsStore = defineStore("local-projects", () => {
     setActiveProject,
     updateLastPageIndex,
     replacePageUnits,
+    loadProjectPageUnits,
     deleteProject,
   };
 });
