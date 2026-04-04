@@ -31,10 +31,11 @@ export interface CreateChapterArgs {
   /** 章节副标题。 */
   subtitle: string;
 
+  /** 可选自定义章节索引，0-based；前端“第 x 话”等于该值加一。 */
+  index?: number;
+
   /** 兼容旧请求字段：章节标题。 */
   title?: string;
-  /** 兼容旧请求字段：章节序号。 */
-  index?: number;
 }
 
 /**
@@ -63,6 +64,8 @@ export interface UpdateChapterArgs {
   chapter_id?: string;
   /** 新章节副标题。 */
   subtitle?: string;
+  /** 新章节索引，0-based。 */
+  index?: number;
 
   /** 流程状态更新。 */
   translate_status?: WorkflowStatus;

@@ -34,6 +34,11 @@
                 @change="handleComicChange"
               />
 
+              <a-button @click="showWorksetEditModal = true">
+                <template #icon><EditOutlined /></template>
+                编辑项目
+              </a-button>
+
               <a-button :loading="loadingBoard" @click="refreshBoard">
                 刷新看板
               </a-button>
@@ -74,7 +79,7 @@
             <a-descriptions-item label="最近活跃">
               {{ formatTimestamp(selectedComic?.last_active_at) }}
             </a-descriptions-item>
-            <a-descriptions-item label="工作集简介">
+            <a-descriptions-item label="项目简介">
               <span class="desc-text">
                 {{ board.workset.description || "无介绍信息" }}
               </span>
@@ -113,7 +118,7 @@
                   当前项目 {{ displaySequence(selectedComic.index) }}
                 </div>
                 <h2 class="comic-focus-panel__title">
-                  {{ selectedComic.title }}
+                  {{ currentProjectTitle }}
                 </h2>
                 <div class="comic-focus-panel__meta">
                   <a-tag>{{ selectedComic.chapter_count }} 话</a-tag>
@@ -125,7 +130,7 @@
                   </a-tag>
                 </div>
                 <p class="comic-focus-panel__description">
-                  {{ selectedComic.description || "当前项目还没有补充简介。" }}
+                  {{ currentProjectDescription }}
                 </p>
               </div>
 
@@ -180,6 +185,17 @@
                               {{ chapter.subtitle || "未命名章节" }}
                             </span>
                           </h3>
+                          <div
+                            v-if="chapter.can_review_role_requests"
+                            class="chapter-card__title-actions"
+                          >
+                            <a-button
+                              size="small"
+                              @click="openChapterNumberEditor(chapter)"
+                            >
+                              编辑话数
+                            </a-button>
+                          </div>
                         </div>
 
                         <div class="chapter-card__tags">
@@ -212,10 +228,33 @@
                           }}
                         </span>
                         <span>{{ formatTimestamp(chapter.created_at) }}</span>
-                        <span>{{ chapter.page_count }} 页</span>
-                        <span>{{ chapter.total_unit_count }} 单元</span>
-                        <span>已翻 {{ chapter.translated_unit_count }}</span>
-                        <span>已校 {{ chapter.proofread_unit_count }}</span>
+                      </div>
+
+                      <div class="chapter-card__stats">
+                        <article class="chapter-card__stat is-pages">
+                          <div class="chapter-card__stat-label">页数</div>
+                          <div class="chapter-card__stat-value">
+                            {{ chapter.page_count }}
+                          </div>
+                        </article>
+                        <article class="chapter-card__stat is-units">
+                          <div class="chapter-card__stat-label">单元</div>
+                          <div class="chapter-card__stat-value">
+                            {{ chapter.total_unit_count }}
+                          </div>
+                        </article>
+                        <article class="chapter-card__stat is-translated">
+                          <div class="chapter-card__stat-label">已翻</div>
+                          <div class="chapter-card__stat-value">
+                            {{ chapter.translated_unit_count }}
+                          </div>
+                        </article>
+                        <article class="chapter-card__stat is-proofread">
+                          <div class="chapter-card__stat-label">已校</div>
+                          <div class="chapter-card__stat-value">
+                            {{ chapter.proofread_unit_count }}
+                          </div>
+                        </article>
                       </div>
                     </div>
 
@@ -239,7 +278,6 @@
                       :applied-team-id="board.workset.team_id"
                       :can-review="chapter.can_review_role_requests"
                       @changed="handleRoleChanged"
-                      @review="handleRoleReview"
                     />
                     <RoleStatusItem
                       :role-slot="chapter.typesetter"
@@ -251,7 +289,6 @@
                       :applied-team-id="board.workset.team_id"
                       :can-review="chapter.can_review_role_requests"
                       @changed="handleRoleChanged"
-                      @review="handleRoleReview"
                     />
                     <RoleStatusItem
                       :role-slot="chapter.proofreader"
@@ -263,7 +300,6 @@
                       :applied-team-id="board.workset.team_id"
                       :can-review="chapter.can_review_role_requests"
                       @changed="handleRoleChanged"
-                      @review="handleRoleReview"
                     />
                     <RoleStatusItem
                       :role-slot="chapter.reviewer"
@@ -275,15 +311,45 @@
                       :applied-team-id="board.workset.team_id"
                       :can-review="chapter.can_review_role_requests"
                       @changed="handleRoleChanged"
-                      @review="handleRoleReview"
                     />
                   </div>
 
                   <div class="chapter-card__footer">
-                    <a-progress
-                      :percent="chapter.progress_percent"
-                      size="small"
-                    />
+                    <div
+                      v-if="
+                        chapter.can_review_role_requests ||
+                        canBatchApplyRoles(chapter)
+                      "
+                      class="chapter-card__footer-actions"
+                    >
+                      <a-button
+                        v-if="chapter.can_review_role_requests"
+                        size="small"
+                        type="primary"
+                        ghost
+                        :disabled="chapter.pending_request_count === 0"
+                        @click="handleRoleReview({ chapter })"
+                      >
+                        审批申请
+                        <template v-if="chapter.pending_request_count > 0">
+                          {{ chapter.pending_request_count }}
+                        </template>
+                      </a-button>
+                      <a-button
+                        v-if="canBatchApplyRoles(chapter)"
+                        size="small"
+                        :loading="batchApplyingChapterId === chapter.id"
+                        @click="handleBatchApplyRoles(chapter)"
+                      >
+                        {{ resolveBatchApplyLabel(chapter) }}
+                      </a-button>
+                    </div>
+                    <div class="chapter-card__progress-line">
+                      <a-progress
+                        :percent="chapter.progress_percent"
+                        size="small"
+                      />
+                    </div>
                   </div>
                 </div>
               </article>
@@ -295,9 +361,17 @@
       <ChapterCreateModal
         v-model:open="showChapterModal"
         :comic-id="selectedComic?.id"
-        :comic-title="selectedComic?.title"
+        :comic-title="currentProjectTitle"
         :chapter-count="selectedComic?.chapter_count"
+        :next-chapter-number="nextChapterNumber"
+        :used-chapter-numbers="usedChapterNumbers"
         @created="handleChapterCreated"
+      />
+
+      <WorksetEditModal
+        v-model:open="showWorksetEditModal"
+        :workset="board.workset"
+        @updated="handleWorksetUpdated"
       />
 
       <a-drawer
@@ -314,22 +388,19 @@
               {{ currentReviewChapter.subtitle || "未命名章节" }}
             </h3>
             <p class="review-drawer__description">
-              当前筛选：{{ reviewRoleLabel || "全部岗位" }}，待审批
-              {{ filteredReviewRequests.length }} 条
+              当前章节共有 {{ reviewRequests.length }} 条待审批申请
             </p>
           </div>
 
           <a-spin :spinning="reviewRequestsLoading" tip="正在加载岗位申请...">
             <a-empty
-              v-if="
-                !reviewRequestsLoading && filteredReviewRequests.length === 0
-              "
-              description="当前筛选下没有待审批申请"
+              v-if="!reviewRequestsLoading && reviewRequests.length === 0"
+              description="当前章节暂无待审批申请"
             />
 
             <div v-else class="review-request-list">
               <article
-                v-for="requestInfo in filteredReviewRequests"
+                v-for="requestInfo in reviewRequests"
                 :key="requestInfo.id"
                 class="review-request-card"
               >
@@ -385,6 +456,37 @@
           </a-spin>
         </template>
       </a-drawer>
+
+      <a-modal
+        :open="Boolean(currentEditableChapter)"
+        title="编辑章节话数"
+        ok-text="保存"
+        cancel-text="取消"
+        :confirm-loading="updatingChapterNumber"
+        @ok="submitChapterNumberUpdate"
+        @cancel="closeChapterNumberEditor"
+      >
+        <a-form layout="vertical">
+          <a-form-item label="当前章节">
+            <a-input
+              :value="
+                currentEditableChapter
+                  ? `第${displaySequence(currentEditableChapter.index)}话 ${currentEditableChapter.subtitle || ''}`.trim()
+                  : ''
+              "
+              disabled
+            />
+          </a-form-item>
+          <a-form-item label="新的话数">
+            <a-input-number
+              v-model:value="editingChapterNumber"
+              :min="1"
+              :precision="0"
+              style="width: 100%"
+            />
+          </a-form-item>
+        </a-form>
+      </a-modal>
     </template>
 
     <div v-else class="workset-detail-view__error">
@@ -395,39 +497,55 @@
 
 <script setup lang="ts">
 import { h } from "vue";
-import { ArrowLeftOutlined, PlusOutlined } from "@ant-design/icons-vue";
+import {
+  ArrowLeftOutlined,
+  EditOutlined,
+  PlusOutlined,
+} from "@ant-design/icons-vue";
 
 import ChapterCreateModal from "./ChapterCreateModal.vue";
 import RoleStatusItem from "./RoleStatusItem.vue";
+import WorksetEditModal from "./WorksetEditModal.vue";
 import { useWorksetDetailView } from "./useWorksetDetailView";
 
 const {
+  batchApplyingChapterId,
   board,
   canCreateChapter,
+  canBatchApplyRoles,
+  closeChapterNumberEditor,
   comicOptions,
+  currentEditableChapter,
+  currentProjectDescription,
   currentMemberRoleMask,
+  currentProjectTitle,
   currentReviewChapter,
   displaySequence,
-  filteredReviewRequests,
+  editingChapterNumber,
   formatTimestamp,
   handleBack,
+  handleBatchApplyRoles,
   handleChapterCreated,
   handleComicChange,
+  openChapterNumberEditor,
   handleReviewDrawerClose,
+  handleWorksetUpdated,
   handleRoleChanged,
   handleRoleRequestReview,
   handleRoleReview,
   headerSubtitle,
   loadingBoard,
+  nextChapterNumber,
   refreshBoard,
+  resolveBatchApplyLabel,
   resolveRoleLabel,
   resolveUserAvatarUrl,
   resolveUserDisplayName,
   resolveWorkflowStageLabel,
   resolveWorkflowTagColor,
+  reviewRequests,
   reviewDrawerOpen,
   reviewRequestsLoading,
-  reviewRoleLabel,
   reviewSubmittingId,
   ROLE_PROOFREADER,
   ROLE_REVIEWER,
@@ -436,7 +554,11 @@ const {
   selectedComic,
   selectedComicStats,
   showChapterModal,
+  showWorksetEditModal,
+  submitChapterNumberUpdate,
   summaryCards,
+  updatingChapterNumber,
+  usedChapterNumbers,
   worksetCoverUrl,
 } = useWorksetDetailView();
 </script>

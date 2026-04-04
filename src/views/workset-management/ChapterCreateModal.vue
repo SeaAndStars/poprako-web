@@ -20,8 +20,25 @@
         type="info"
         show-icon
         class="chapter-modal-alert"
-        :message="`章节序号由后端自动分配，当前预计会创建第 ${nextChapterIndex} 话。`"
+        :message="chapterNumberAlert"
       />
+
+      <a-form-item label="第几话 (可选)">
+        <a-input-number
+          v-model:value="form.chapterNumber"
+          :min="1"
+          :precision="0"
+          placeholder="留空则自动分配"
+          style="width: 100%"
+        />
+        <div class="chapter-form-hint">
+          留空则自动创建第
+          {{
+            nextChapterNumber
+          }}
+          话；如需跳号，可手动指定新的未使用话数。已使用过的历史编号也不能复用。
+        </div>
+      </a-form-item>
 
       <a-form-item label="章节副标题" required>
         <a-input
@@ -78,10 +95,13 @@ interface Props {
   comicId?: string;
   comicTitle?: string;
   chapterCount?: number;
+  nextChapterNumber?: number;
+  usedChapterNumbers?: number[];
 }
 
 interface ChapterCreateForm {
   subtitle: string;
+  chapterNumber: number | null;
 }
 
 const props = defineProps<Props>();
@@ -102,10 +122,23 @@ const fileList = computed<UploadFile[]>(() => {
 });
 const form = reactive<ChapterCreateForm>({
   subtitle: "",
+  chapterNumber: null,
 });
 
-const nextChapterIndex = computed(() => (props.chapterCount ?? 0) + 1);
+const nextChapterNumber = computed(
+  () => props.nextChapterNumber ?? (props.chapterCount ?? 0) + 1,
+);
 const selectedFileCount = computed(() => selectedFiles.value.length);
+const usedChapterNumberSet = computed(
+  () => new Set((props.usedChapterNumbers || []).filter((item) => item > 0)),
+);
+const chapterNumberAlert = computed(() => {
+  if (typeof form.chapterNumber === "number") {
+    return `将按你指定的编号创建第 ${form.chapterNumber} 话；如果该编号历史上已使用过，后端会拒绝创建。`;
+  }
+
+  return `章节序号默认由后端分配，当前预计会创建第 ${nextChapterNumber.value} 话。`;
+});
 
 watch(
   () => props.open,
@@ -151,6 +184,7 @@ function handleCancel(): void {
 
 function resetForm(): void {
   form.subtitle = "";
+  form.chapterNumber = null;
   selectedFiles.value = [];
 }
 
@@ -184,6 +218,19 @@ async function handleSubmit(): Promise<void> {
   if (!subtitle) {
     message.warning("请输入章节副标题");
     return;
+  }
+
+  const chapterNumber = form.chapterNumber;
+  if (chapterNumber !== null) {
+    if (!Number.isInteger(chapterNumber) || chapterNumber <= 0) {
+      message.warning("章节话数必须是大于 0 的整数");
+      return;
+    }
+
+    if (usedChapterNumberSet.value.has(chapterNumber)) {
+      message.error(`第 ${chapterNumber} 话已存在或已被使用，请更换编号`);
+      return;
+    }
   }
 
   const selectedFiles = getSelectedFiles();
@@ -222,6 +269,7 @@ async function handleSubmit(): Promise<void> {
     const createdChapter = await createChapter({
       comic_id: props.comicId,
       subtitle,
+      index: chapterNumber === null ? undefined : chapterNumber - 1,
     });
 
     const reserveResult = await reserveChapterPages({
@@ -247,7 +295,7 @@ async function handleSubmit(): Promise<void> {
     }
 
     message.success({
-      content: `第 ${nextChapterIndex.value} 话已创建，并完成 ${selectedFiles.length} 张底图上传`,
+      content: `第 ${chapterNumber ?? nextChapterNumber.value} 话已创建，并完成 ${selectedFiles.length} 张底图上传`,
       key: messageKey,
       duration: 2,
     });
@@ -274,5 +322,12 @@ async function handleSubmit(): Promise<void> {
   margin-top: 12px;
   color: var(--color-on-surface-variant, #64748b);
   font-size: 12px;
+}
+
+.chapter-form-hint {
+  margin-top: 8px;
+  color: var(--color-on-surface-variant, #64748b);
+  font-size: 12px;
+  line-height: 1.6;
 }
 </style>

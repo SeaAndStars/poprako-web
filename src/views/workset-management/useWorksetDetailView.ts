@@ -3,12 +3,17 @@ import { useRoute, useRouter } from "vue-router";
 import { message } from "ant-design-vue";
 
 import {
+  createRoleRequest,
   getMyMembers,
   getRoleRequestList,
   getWorksetBoard,
+  updateChapter,
   reviewRoleRequest,
 } from "../../api/modules";
-import { resolveAssetUrl } from "../../api/objectStorage";
+import {
+  appendCacheBustQueryToUrl,
+  resolveAssetUrl,
+} from "../../api/objectStorage";
 import type {
   MemberInfo,
   RoleRequestInfo,
@@ -50,8 +55,6 @@ export const WORKFLOW_STAGE_COLORS: Record<string, string> = {
 
 export interface RoleReviewPayload {
   chapter: WorksetBoardChapterInfo;
-  roleValue: number;
-  roleLabel: string;
 }
 
 interface WorksetSummaryCard {
@@ -67,6 +70,11 @@ interface ComicFocusStat {
   label: string;
   value: string | number;
   hint: string;
+}
+
+interface BatchApplicableRole {
+  roleLabel: string;
+  roleValue: number;
 }
 
 function resolveFilledRoleSlotCount(
@@ -139,6 +147,13 @@ export function resolveRoleLabel(roleValue: number): string {
   }
 }
 
+function hasRoleCapability(
+  roleMask: number | undefined,
+  roleValue: number,
+): boolean {
+  return typeof roleMask === "number" && (roleMask & roleValue) === roleValue;
+}
+
 export function useWorksetDetailView() {
   const route = useRoute();
   const router = useRouter();
@@ -147,13 +162,16 @@ export function useWorksetDetailView() {
   const currentTeamMember = ref<MemberInfo | null>(null);
   const loadingBoard = ref(false);
   const showChapterModal = ref(false);
+  const showWorksetEditModal = ref(false);
   const reviewDrawerOpen = ref(false);
   const reviewChapterId = ref<string | undefined>(undefined);
-  const reviewRoleValue = ref<number | undefined>(undefined);
-  const reviewRoleLabel = ref("");
   const reviewRequests = ref<RoleRequestInfo[]>([]);
   const reviewRequestsLoading = ref(false);
   const reviewSubmittingId = ref<string | undefined>(undefined);
+  const batchApplyingChapterId = ref<string | undefined>(undefined);
+  const editingChapterNumberId = ref<string | undefined>(undefined);
+  const editingChapterNumber = ref<number | null>(null);
+  const updatingChapterNumber = ref(false);
 
   const worksetID = computed(() => String(route.params.id || ""));
   const requestedComicID = computed(() => {
@@ -164,8 +182,33 @@ export function useWorksetDetailView() {
 
   const selectedComic = computed(() => board.value?.selected_comic);
   const worksetCoverUrl = computed(() =>
-    resolveAssetUrl(board.value?.workset.cover_url),
+    appendCacheBustQueryToUrl(
+      board.value?.workset.cover_url,
+      board.value?.workset.updated_at,
+    ),
   );
+  const currentProjectTitle = computed(() => {
+    const worksetName = board.value?.workset.name?.trim();
+    const comicTitle = selectedComic.value?.title?.trim();
+
+    if ((board.value?.comic_options.length ?? 0) <= 1) {
+      return worksetName || comicTitle || "未命名项目";
+    }
+
+    return comicTitle || worksetName || "未命名项目";
+  });
+  const currentProjectDescription = computed(() => {
+    const worksetDescription = board.value?.workset.description?.trim();
+    const comicDescription = selectedComic.value?.description?.trim();
+
+    if ((board.value?.comic_options.length ?? 0) <= 1) {
+      return (
+        worksetDescription || comicDescription || "当前项目还没有补充简介。"
+      );
+    }
+
+    return comicDescription || worksetDescription || "当前项目还没有补充简介。";
+  });
   const currentMemberRoleMask = computed(() => currentTeamMember.value?.roles);
   const headerSubtitle = computed(() => {
     const teamName =
@@ -182,15 +225,6 @@ export function useWorksetDetailView() {
   const currentReviewChapter = computed(() => {
     return board.value?.chapters.find(
       (chapter) => chapter.id === reviewChapterId.value,
-    );
-  });
-  const filteredReviewRequests = computed(() => {
-    if (!reviewRoleValue.value) {
-      return reviewRequests.value;
-    }
-
-    return reviewRequests.value.filter(
-      (requestInfo) => requestInfo.role === reviewRoleValue.value,
     );
   });
   const pendingRequestTotal = computed(() => {
@@ -229,7 +263,7 @@ export function useWorksetDetailView() {
         key: "chapter-count",
         label: "章节数",
         value: chapterCount,
-        hint: selectedComic.value?.title || "尚未初始化项目内容",
+        hint: currentProjectTitle.value || "尚未初始化项目内容",
         tone: "accent",
       },
       {
@@ -288,6 +322,26 @@ export function useWorksetDetailView() {
         hint: "按项目维度记录",
       },
     ];
+  });
+  const nextChapterNumber = computed(() => {
+    const maxIndex = (board.value?.chapters || []).reduce(
+      (currentMax, chapter) => {
+        return Math.max(currentMax, chapter.index);
+      },
+      -1,
+    );
+
+    return maxIndex + 2;
+  });
+  const usedChapterNumbers = computed(() => {
+    return (board.value?.chapters || [])
+      .map((chapter) => chapter.index + 1)
+      .filter((chapterNumber) => chapterNumber > 0);
+  });
+  const currentEditableChapter = computed(() => {
+    return board.value?.chapters.find(
+      (chapter) => chapter.id === editingChapterNumberId.value,
+    );
   });
 
   watch(
@@ -392,6 +446,11 @@ export function useWorksetDetailView() {
     void loadBoard();
   }
 
+  function handleWorksetUpdated(): void {
+    showWorksetEditModal.value = false;
+    void loadBoard();
+  }
+
   function handleRoleChanged(): void {
     void loadBoard();
   }
@@ -399,9 +458,171 @@ export function useWorksetDetailView() {
   function handleRoleReview(payload: RoleReviewPayload): void {
     reviewDrawerOpen.value = true;
     reviewChapterId.value = payload.chapter.id;
-    reviewRoleValue.value = payload.roleValue;
-    reviewRoleLabel.value = payload.roleLabel;
     void loadRoleRequests(payload.chapter.id);
+  }
+
+  function openChapterNumberEditor(chapter: WorksetBoardChapterInfo): void {
+    editingChapterNumberId.value = chapter.id;
+    editingChapterNumber.value = chapter.index + 1;
+  }
+
+  function closeChapterNumberEditor(): void {
+    editingChapterNumberId.value = undefined;
+    editingChapterNumber.value = null;
+  }
+
+  async function submitChapterNumberUpdate(): Promise<void> {
+    if (!currentEditableChapter.value || editingChapterNumber.value === null) {
+      return;
+    }
+
+    const nextChapterValue = editingChapterNumber.value;
+    if (!Number.isInteger(nextChapterValue) || nextChapterValue <= 0) {
+      message.warning("章节话数必须是大于 0 的整数");
+      return;
+    }
+
+    const duplicatedActiveChapter = (board.value?.chapters || []).some(
+      (chapter) =>
+        chapter.id !== currentEditableChapter.value?.id &&
+        chapter.index + 1 === nextChapterValue,
+    );
+    if (duplicatedActiveChapter) {
+      message.error(`第 ${nextChapterValue} 话已存在，请更换编号`);
+      return;
+    }
+
+    updatingChapterNumber.value = true;
+    try {
+      await updateChapter(currentEditableChapter.value.id, {
+        index: nextChapterValue - 1,
+      });
+      message.success(`第 ${nextChapterValue} 话编号已更新`);
+      closeChapterNumberEditor();
+      await loadBoard();
+    } catch (error: unknown) {
+      message.error(
+        error instanceof Error ? error.message : "更新章节话数失败",
+      );
+    } finally {
+      updatingChapterNumber.value = false;
+    }
+  }
+
+  function resolveBatchApplicableRoles(
+    chapter: WorksetBoardChapterInfo,
+  ): BatchApplicableRole[] {
+    const currentRoleMask = currentMemberRoleMask.value;
+    const roleCandidates = [
+      {
+        roleLabel: "翻译",
+        roleValue: ROLE_TRANSLATOR,
+        roleSlot: chapter.translator,
+      },
+      {
+        roleLabel: "校对",
+        roleValue: ROLE_PROOFREADER,
+        roleSlot: chapter.proofreader,
+      },
+      {
+        roleLabel: "嵌字",
+        roleValue: ROLE_TYPESETTER,
+        roleSlot: chapter.typesetter,
+      },
+      {
+        roleLabel: "审稿",
+        roleValue: ROLE_REVIEWER,
+        roleSlot: chapter.reviewer,
+      },
+    ];
+
+    return roleCandidates
+      .filter((candidate) => {
+        return (
+          !candidate.roleSlot.occupant?.id &&
+          !candidate.roleSlot.my_pending_request_id &&
+          hasRoleCapability(currentRoleMask, candidate.roleValue)
+        );
+      })
+      .map(({ roleLabel, roleValue }) => ({ roleLabel, roleValue }));
+  }
+
+  function canBatchApplyRoles(chapter: WorksetBoardChapterInfo): boolean {
+    return resolveBatchApplicableRoles(chapter).length > 1;
+  }
+
+  function resolveBatchApplyLabel(chapter: WorksetBoardChapterInfo): string {
+    const applicableRoles = resolveBatchApplicableRoles(chapter);
+    return `一键申请 ${applicableRoles.length} 个可做岗位`;
+  }
+
+  async function handleBatchApplyRoles(
+    chapter: WorksetBoardChapterInfo,
+  ): Promise<void> {
+    const applicableRoles = resolveBatchApplicableRoles(chapter);
+    if (applicableRoles.length <= 1 || batchApplyingChapterId.value) {
+      return;
+    }
+
+    batchApplyingChapterId.value = chapter.id;
+    const messageKey = `batch-role-request-${chapter.id}`;
+
+    try {
+      message.loading({
+        content: `正在提交第 ${displaySequence(chapter.index)} 话的多个岗位申请...`,
+        key: messageKey,
+      });
+
+      const results = await Promise.allSettled(
+        applicableRoles.map((roleInfo) =>
+          createRoleRequest({
+            chapter_id: chapter.id,
+            role: roleInfo.roleValue,
+            applied_team_id: board.value?.workset.team_id,
+          }),
+        ),
+      );
+
+      const succeededRoles: string[] = [];
+      const failedRoles: string[] = [];
+
+      results.forEach((result, index) => {
+        const targetRole = applicableRoles[index];
+        if (result.status === "fulfilled") {
+          succeededRoles.push(targetRole.roleLabel);
+          return;
+        }
+
+        const errorMessage =
+          result.reason instanceof Error ? result.reason.message : "申请失败";
+        failedRoles.push(`${targetRole.roleLabel}：${errorMessage}`);
+      });
+
+      if (succeededRoles.length > 0 && failedRoles.length === 0) {
+        message.success({
+          content: `已提交第 ${displaySequence(chapter.index)} 话的${succeededRoles.join("、")}申请`,
+          key: messageKey,
+          duration: 2,
+        });
+      } else if (succeededRoles.length > 0) {
+        message.warning({
+          content: `已提交${succeededRoles.join("、")}；其余失败：${failedRoles.join("；")}`,
+          key: messageKey,
+          duration: 4,
+        });
+      } else {
+        message.error({
+          content: failedRoles.join("；") || "批量申请岗位失败",
+          key: messageKey,
+        });
+      }
+
+      if (succeededRoles.length > 0 || failedRoles.length > 0) {
+        await loadBoard();
+      }
+    } finally {
+      batchApplyingChapterId.value = undefined;
+    }
   }
 
   async function handleRoleRequestReview(
@@ -433,39 +654,48 @@ export function useWorksetDetailView() {
   function handleReviewDrawerClose(): void {
     reviewDrawerOpen.value = false;
     reviewChapterId.value = undefined;
-    reviewRoleValue.value = undefined;
-    reviewRoleLabel.value = "";
     reviewRequests.value = [];
   }
 
   return {
     board,
+    batchApplyingChapterId,
     canCreateChapter,
+    canBatchApplyRoles,
+    closeChapterNumberEditor,
     comicOptions,
+    currentEditableChapter,
+    currentProjectDescription,
     currentMemberRoleMask,
+    currentProjectTitle,
     currentReviewChapter,
     displaySequence,
-    filteredReviewRequests,
+    editingChapterNumber,
     formatTimestamp,
     handleBack,
+    handleBatchApplyRoles,
     handleChapterCreated,
     handleComicChange,
+    openChapterNumberEditor,
     handleReviewDrawerClose,
+    handleWorksetUpdated,
     handleRoleChanged,
     handleRoleRequestReview,
     handleRoleReview,
     headerSubtitle,
     loadingBoard,
+    nextChapterNumber,
     pendingRequestTotal,
     refreshBoard,
+    resolveBatchApplyLabel,
     resolveRoleLabel,
     resolveUserAvatarUrl,
     resolveUserDisplayName,
     resolveWorkflowStageLabel,
     resolveWorkflowTagColor,
+    reviewRequests,
     reviewDrawerOpen,
     reviewRequestsLoading,
-    reviewRoleLabel,
     reviewSubmittingId,
     ROLE_PROOFREADER,
     ROLE_REVIEWER,
@@ -474,7 +704,11 @@ export function useWorksetDetailView() {
     selectedComic,
     selectedComicStats,
     showChapterModal,
+    showWorksetEditModal,
+    submitChapterNumberUpdate,
     summaryCards,
+    updatingChapterNumber,
+    usedChapterNumbers,
     worksetCoverUrl,
   };
 }

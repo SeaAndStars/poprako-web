@@ -24,15 +24,6 @@
         <span v-if="actionText" class="role-action">{{ actionText }}</span>
       </button>
     </a-tooltip>
-
-    <button
-      v-if="canReviewRequests"
-      type="button"
-      class="review-link"
-      @click="emitReview"
-    >
-      审批 {{ roleSlot.pending_request_count }}
-    </button>
   </div>
 </template>
 
@@ -52,12 +43,6 @@ import type {
   WorksetBoardRoleSlotInfo,
 } from "../../types/domain";
 
-interface ReviewPayload {
-  chapter: WorksetBoardChapterInfo;
-  roleValue: number;
-  roleLabel: string;
-}
-
 const props = defineProps<{
   roleLabel: string;
   roleValue: number;
@@ -71,7 +56,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: "changed"): void;
-  (event: "review", payload: ReviewPayload): void;
 }>();
 
 const actionPending = ref(false);
@@ -202,14 +186,6 @@ async function handlePrimaryAction(): Promise<void> {
     actionPending.value = false;
   }
 }
-
-function emitReview(): void {
-  emit("review", {
-    chapter: props.chapter,
-    roleValue: props.roleValue,
-    roleLabel: props.roleLabel,
-  });
-}
 </script>
 
 <style scoped lang="scss">
@@ -338,15 +314,5 @@ function emitReview(): void {
 .role-action {
   font-size: 12px;
   font-weight: 700;
-}
-
-.review-link {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--role-review-link);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
 }
 </style>

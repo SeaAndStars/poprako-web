@@ -290,9 +290,16 @@ html[data-theme="dark"] .workset-detail-view {
   font-weight: 600;
 }
 
+.chapter-card__title-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .chapter-card__tags,
 .chapter-card__meta,
 .chapter-card__roles,
+.chapter-card__footer-actions,
 .review-request-card__actions,
 .workset-empty-state__actions {
   display: flex;
@@ -307,6 +314,48 @@ html[data-theme="dark"] .workset-detail-view {
   gap: 10px 14px;
 }
 
+.chapter-card__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.chapter-card__stat {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--workset-border) 78%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--workset-glass) 88%, transparent);
+}
+
+.chapter-card__stat-label {
+  color: var(--workset-muted);
+  font-size: 12px;
+}
+
+.chapter-card__stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.chapter-card__stat.is-pages .chapter-card__stat-value {
+  color: var(--workset-accent);
+}
+
+.chapter-card__stat.is-units .chapter-card__stat-value {
+  color: #0ea5e9;
+}
+
+.chapter-card__stat.is-translated .chapter-card__stat-value {
+  color: var(--workset-warning);
+}
+
+.chapter-card__stat.is-proofread .chapter-card__stat-value {
+  color: var(--workset-success);
+}
+
 .chapter-card__progress-block {
   display: flex;
   align-items: center;
@@ -314,6 +363,23 @@ html[data-theme="dark"] .workset-detail-view {
 
 .chapter-card__roles {
   gap: 12px;
+}
+
+.chapter-card__footer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.chapter-card__progress-line {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chapter-card__progress-line :where(.ant-progress),
+.chapter-card__progress-line :where(.ant-progress-outer),
+.chapter-card__progress-line :where(.ant-progress-inner) {
+  width: 100%;
 }
 
 .review-drawer__summary {
@@ -405,6 +471,7 @@ html[data-theme="dark"] .workset-detail-view {
 }
 
 @media (max-width: 1080px) {
+  .chapter-card__stats,
   .workset-summary-grid,
   .comic-focus-panel {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -420,11 +487,13 @@ html[data-theme="dark"] .workset-detail-view {
 
   .workset-toolbar,
   .chapter-card__header,
+  .chapter-card__footer,
   .chapter-card__title-row,
   .review-request-card__header {
     flex-direction: column;
   }
 
+  .chapter-card__stats,
   .comic-focus-panel,
   .comic-focus-panel__stat-grid,
   .workset-summary-grid {

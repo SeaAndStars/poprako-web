@@ -69,10 +69,19 @@
           @click="goToDetail(workset.id)"
         >
           <template #cover>
-            <div
-              class="workset-card__cover"
-              :style="getWorksetCoverStyle(workset)"
-            >
+            <div class="workset-card__cover">
+              <a-image
+                v-if="resolveWorksetCoverUrl(workset)"
+                class="workset-card__cover-media"
+                :src="resolveWorksetCoverUrl(workset)"
+                :alt="`${workset.name} 封面`"
+                :preview="false"
+              />
+              <div
+                v-else
+                class="workset-card__cover-media workset-card__cover-placeholder"
+              ></div>
+
               <div class="workset-card__cover-overlay">
                 <span class="workset-card__chapter-count">
                   {{ resolveWorksetCoverLabel(workset) }}
@@ -117,10 +126,7 @@ import {
 } from "@ant-design/icons-vue";
 
 import { getMyMembers, getMyTeams, getWorksetList } from "../../api/modules";
-import {
-  appendCacheBustQueryToUrl,
-  resolveAssetUrl,
-} from "../../api/objectStorage";
+import { appendCacheBustQueryToUrl } from "../../api/objectStorage";
 import type { MemberInfo, TeamInfo, WorksetInfo } from "../../types/domain";
 import WorksetCreateModal from "./WorksetCreateModal.vue";
 
@@ -202,16 +208,8 @@ function openCreateModal() {
   isCreateModalOpen.value = true;
 }
 
-function getWorksetCoverStyle(workset: WorksetInfo) {
-  const resolvedCoverUrl = resolveAssetUrl(
-    appendCacheBustQueryToUrl(workset.cover_url, workset.updated_at),
-  );
-
-  return {
-    backgroundImage:
-      (resolvedCoverUrl ? `url("${resolvedCoverUrl}")` : undefined) ||
-      "linear-gradient(160deg, rgba(95, 20, 12, 0.94), rgba(177, 46, 31, 0.88) 55%, rgba(237, 195, 72, 0.72))",
-  };
+function resolveWorksetCoverUrl(workset: WorksetInfo): string | undefined {
+  return appendCacheBustQueryToUrl(workset.cover_url, workset.updated_at);
 }
 
 function resolveWorksetCoverLabel(workset: WorksetInfo): string {
@@ -268,7 +266,7 @@ function goToDetail(worksetID: string) {
     box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.15);
     border-color: var(--color-primary);
 
-    .workset-card__cover {
+    .workset-card__cover-media {
       transform: scale(1.05);
     }
   }
@@ -279,11 +277,36 @@ function goToDetail(worksetID: string) {
 
   &__cover {
     height: 300px;
-    background-size: cover;
-    background-position: center;
-    transition: transform 0.4s ease;
     position: relative;
+    overflow: hidden;
     border-radius: 12px 12px 0 0;
+  }
+
+  &__cover-media {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.4s ease;
+
+    :deep(.ant-image),
+    :deep(.ant-image-img) {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    :deep(.ant-image-img) {
+      object-fit: cover;
+    }
+  }
+
+  &__cover-placeholder {
+    background: linear-gradient(
+      160deg,
+      rgba(95, 20, 12, 0.94),
+      rgba(177, 46, 31, 0.88) 55%,
+      rgba(237, 195, 72, 0.72)
+    );
   }
 
   &__cover-overlay {
