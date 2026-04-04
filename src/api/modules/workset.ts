@@ -28,6 +28,14 @@ export interface CreateWorksetArgs {
   name: string;
   /** 工作集描述。 */
   description?: string;
+  /** 默认翻译用户 ID。 */
+  translator_user_id?: string;
+  /** 默认校对用户 ID。 */
+  proofreader_user_id?: string;
+  /** 默认嵌字用户 ID。 */
+  typesetter_user_id?: string;
+  /** 默认审稿用户 ID。 */
+  reviewer_user_id?: string;
 }
 
 /**
@@ -58,7 +66,48 @@ export interface UpdateWorksetArgs {
   name: string;
   /** 工作集描述。 */
   description?: string;
+  /** 默认翻译用户 ID。 */
+  translator_user_id?: string;
+  /** 默认校对用户 ID。 */
+  proofreader_user_id?: string;
+  /** 默认嵌字用户 ID。 */
+  typesetter_user_id?: string;
+  /** 默认审稿用户 ID。 */
+  reviewer_user_id?: string;
 }
+
+/**
+ * 获取工作集详情查询参数。
+ */
+export type GetWorksetByIDQuery = IncludeQuery;
+
+/**
+ * 获取工作集详情响应类型。
+ */
+export type GetWorksetByIDResponse = WorksetInfo;
+
+/**
+ * 预留工作集封面请求体。
+ */
+export interface ReserveWorksetCoverArgs {
+  /** 上传图片扩展名。 */
+  extension?: string;
+  /** 上传请求使用的 Content-Type。 */
+  content_type?: string;
+}
+
+/**
+ * 预留工作集封面结果。
+ */
+export interface ReserveWorksetCoverResult {
+  /** 后端签发的预签名 PUT URL。 */
+  put_url: string;
+}
+
+/**
+ * 预留工作集封面响应类型。
+ */
+export type ReserveWorksetCoverResponse = ReserveWorksetCoverResult;
 
 /**
  * 更新工作集请求类型。
@@ -88,7 +137,27 @@ export type DeleteWorksetResponse = void;
 export async function getWorksetList(
   worksetListQuery: GetWorksetListRequest,
 ): Promise<GetWorksetListResponse> {
-  return httpClient.get<GetWorksetListResponse>("/worksets", worksetListQuery);
+  const worksetList = await httpClient.get<GetWorksetListResponse>(
+    "/worksets",
+    worksetListQuery,
+  );
+
+  return Array.isArray(worksetList) ? worksetList : [];
+}
+
+/**
+ * 获取工作集详情，对应 GET /worksets/{workset_id}。
+ * 请求类型：GetWorksetByIDQuery。
+ * 返回类型：GetWorksetByIDResponse。
+ */
+export async function getWorksetByID(
+  worksetID: string,
+  query?: GetWorksetByIDQuery,
+): Promise<GetWorksetByIDResponse> {
+  return httpClient.get<GetWorksetByIDResponse>(
+    `/worksets/${worksetID}`,
+    query,
+  );
 }
 
 /**
@@ -114,10 +183,39 @@ export async function updateWorkset(
   worksetID: string,
   updateWorksetArgs: UpdateWorksetRequest,
 ): Promise<UpdateWorksetResponse> {
+  const requestBody: UpdateWorksetRequest = {
+    ...updateWorksetArgs,
+    id: worksetID,
+  };
+
   await httpClient.put<UpdateWorksetResponse, UpdateWorksetRequest>(
     `/worksets/${worksetID}`,
-    updateWorksetArgs,
+    requestBody,
   );
+}
+
+/**
+ * 预留工作集封面，对应 POST /worksets/{workset_id}/cover。
+ * 请求类型：ReserveWorksetCoverArgs。
+ * 返回类型：ReserveWorksetCoverResponse。
+ */
+export async function reserveWorksetCover(
+  worksetID: string,
+  reserveWorksetCoverArgs: ReserveWorksetCoverArgs,
+): Promise<ReserveWorksetCoverResponse> {
+  return httpClient.post<ReserveWorksetCoverResponse, ReserveWorksetCoverArgs>(
+    `/worksets/${worksetID}/cover`,
+    reserveWorksetCoverArgs,
+  );
+}
+
+/**
+ * 确认工作集封面已上传，对应 POST /worksets/{workset_id}/cover/confirm。
+ */
+export async function confirmWorksetCoverUploaded(
+  worksetID: string,
+): Promise<void> {
+  await httpClient.post<void>(`/worksets/${worksetID}/cover/confirm`);
 }
 
 /**

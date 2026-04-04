@@ -23,8 +23,10 @@
   },
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.1",
+    "@microsoft/signalr": "^10.0.0",
     "ant-design-vue": "^4.2.6",
     "axios": "^1.8.4",
+    "cropperjs": "^1.6.2",
     "electron-squirrel-startup": "^1.0.1",
     "pinia": "^3.0.3",
     "vue": "^3.5.13",

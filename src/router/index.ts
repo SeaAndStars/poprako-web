@@ -23,6 +23,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import("../views/LoginView.vue"),
   },
   {
+    path: "/register",
+    name: "register",
+    component: () => import("../views/LoginView.vue"),
+  },
+  {
     path: "/workspace",
     name: "workspace",
     component: () => import("../views/DashboardView.vue"),
@@ -31,6 +36,17 @@ const routes: RouteRecordRaw[] = [
     path: "/translator/:projectId",
     name: "translator",
     component: () => import("../views/TranslatorView.vue"),
+  },
+  {
+    path: "/worksets",
+    name: "workset-list",
+    component: () => import("../views/workset-management/WorksetListView.vue"),
+  },
+  {
+    path: "/worksets/:id",
+    name: "workset-detail",
+    component: () =>
+      import("../views/workset-management/WorksetDetailView.vue"),
   },
   {
     path: "/dashboard",
@@ -91,16 +107,13 @@ function isDevelopmentPreviewModeEnabled(): boolean {
 router.beforeEach((to) => {
   const authStore = useAuthStore();
   const developmentPreviewModeEnabled = isDevelopmentPreviewModeEnabled();
+  const isAuthRoute = to.path === "/login" || to.path === "/register";
 
-  if (
-    to.path !== "/login" &&
-    !authStore.isLoggedIn &&
-    !developmentPreviewModeEnabled
-  ) {
+  if (!isAuthRoute && !authStore.isLoggedIn && !developmentPreviewModeEnabled) {
     return "/login";
   }
 
-  if (to.path === "/login" && authStore.isLoggedIn) {
+  if (isAuthRoute && authStore.isLoggedIn) {
     return "/workspace";
   }
 

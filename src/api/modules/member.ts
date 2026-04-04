@@ -183,9 +183,14 @@ export async function updateMemberRole(
   memberID: string,
   updateMemberRoleArgs: UpdateMemberRoleRequest,
 ): Promise<UpdateMemberRoleResponse> {
+  const requestBody: UpdateMemberRoleRequest = {
+    ...updateMemberRoleArgs,
+    id: memberID,
+  };
+
   await httpClient.put<UpdateMemberRoleResponse, UpdateMemberRoleRequest>(
     `/members/${memberID}`,
-    updateMemberRoleArgs,
+    requestBody,
   );
 }
 

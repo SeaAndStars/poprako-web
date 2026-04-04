@@ -37,12 +37,14 @@ function isDevelopmentPreviewModeEnabled(): boolean {
 /**
  * 判断当前是否已在登录页面，兼容 history 与 hash 两种路由模式。
  */
-function isOnLoginRoute(): boolean {
-  if (location.pathname === "/login") {
+function isOnAuthRoute(): boolean {
+  if (location.pathname === "/login" || location.pathname === "/register") {
     return true;
   }
 
-  return location.hash.endsWith("/login");
+  return (
+    location.hash.endsWith("/login") || location.hash.endsWith("/register")
+  );
 }
 
 function resolveApiBaseURL(): string {
@@ -120,7 +122,7 @@ class ApiHttpClient {
       // 仅当明确开启开发直达模式时，允许保留当前页面联调。
       if (
         (!isDevelopmentMode || !isDevelopmentPreviewModeEnabled()) &&
-        !isOnLoginRoute()
+        !isOnAuthRoute()
       ) {
         location.href = "/login";
       }

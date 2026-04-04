@@ -26,6 +26,8 @@ export interface ReserveChapterPagesArgs {
   chapter_id: string;
   /** 预留页面数量。 */
   page_count: number;
+  /** 上传文件扩展名。 */
+  extension: string;
 }
 
 /**

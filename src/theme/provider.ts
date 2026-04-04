@@ -16,18 +16,25 @@ import { theme as antdTheme, type ConfigProviderProps } from "ant-design-vue";
  */
 type AntdThemeConfig = NonNullable<ConfigProviderProps["theme"]>;
 type AntdComponentThemeConfig = NonNullable<AntdThemeConfig["components"]>;
+type AntdComponentSize = NonNullable<ConfigProviderProps["componentSize"]>;
 
 /**
  * 主题持久化键名，用于在本地存储中记忆用户主题偏好。
  */
 const THEME_STORAGE_KEY = "poprako_theme_mode";
+const THEME_DENSITY_STORAGE_KEY = "poprako_theme_density";
 
 /**
  * 主题模式枚举值。
  */
 export type ThemeMode = "light" | "dark" | "system";
+export type ThemeDensity = "comfortable" | "compact";
 
 const THEME_MODE_VALUES: ReadonlyArray<ThemeMode> = ["light", "dark", "system"];
+const THEME_DENSITY_VALUES: ReadonlyArray<ThemeDensity> = [
+  "comfortable",
+  "compact",
+];
 
 const APP_FONT_FAMILY =
   '"LXGWWenKaiMono", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif';
@@ -64,6 +71,12 @@ const DARK_THEME_TOKEN = {
   colorText: "#edf1f8",
   colorTextSecondary: "#a9b2c2",
   fontFamily: APP_FONT_FAMILY,
+};
+
+const COMPACT_THEME_TOKEN = {
+  controlHeight: 30,
+  controlHeightLG: 36,
+  controlHeightSM: 24,
 };
 
 const LIGHT_COMPONENT_TOKEN = {
@@ -138,20 +151,50 @@ const DARK_COMPONENT_TOKEN = {
   },
 };
 
+function createComponentThemeConfig(
+  isDarkMode: boolean,
+  themeDensity: ThemeDensity,
+): AntdComponentThemeConfig {
+  const baseComponentToken = isDarkMode
+    ? DARK_COMPONENT_TOKEN
+    : LIGHT_COMPONENT_TOKEN;
+  const isCompactDensity = themeDensity === "compact";
+
+  return {
+    ...baseComponentToken,
+    Button: {
+      ...baseComponentToken.Button,
+      controlHeight: isCompactDensity ? 32 : 36,
+    },
+    Card: {
+      ...baseComponentToken.Card,
+      borderRadiusLG: isCompactDensity ? 14 : 16,
+    },
+  } as AntdComponentThemeConfig;
+}
+
 /**
  * 全局主题 Provider 暴露的数据结构。
  */
 export interface ThemeProviderState {
   /** 用户显式选择的主题模式。 */
   themeMode: Ref<ThemeMode>;
+  /** 用户显式选择的界面密度。 */
+  themeDensity: Ref<ThemeDensity>;
   /** 当前是否处于暗黑模式。 */
   isDarkMode: ComputedRef<boolean>;
+  /** 当前是否启用紧凑密度。 */
+  isCompactDensity: ComputedRef<boolean>;
   /** Ant Design Vue 的主题配置对象。 */
   antdThemeConfig: ComputedRef<AntdThemeConfig>;
+  /** Ant Design Vue 的全局组件尺寸。 */
+  antdComponentSize: ComputedRef<AntdComponentSize>;
   /** 切换亮色/暗黑模式。 */
   toggleThemeMode: () => void;
   /** 显式设置主题模式。 */
   setThemeMode: (themeMode: ThemeMode) => void;
+  /** 显式设置界面密度。 */
+  setThemeDensity: (themeDensity: ThemeDensity) => void;
 }
 
 /**
@@ -169,11 +212,25 @@ function resolveInitialThemeMode(): ThemeMode {
   return "system";
 }
 
+function resolveInitialThemeDensity(): ThemeDensity {
+  const cachedThemeDensity = localStorage.getItem(THEME_DENSITY_STORAGE_KEY);
+
+  if (
+    cachedThemeDensity !== null &&
+    THEME_DENSITY_VALUES.includes(cachedThemeDensity as ThemeDensity)
+  ) {
+    return cachedThemeDensity as ThemeDensity;
+  }
+
+  return "comfortable";
+}
+
 /**
  * 创建全局主题 Provider。
  */
 export function useThemeProvider(): ThemeProviderState {
   const themeMode = ref<ThemeMode>(resolveInitialThemeMode());
+  const themeDensity = ref<ThemeDensity>(resolveInitialThemeDensity());
   const systemDarkMode = ref(
     window.matchMedia("(prefers-color-scheme: dark)").matches,
   );
@@ -207,14 +264,31 @@ export function useThemeProvider(): ThemeProviderState {
     return themeMode.value === "dark";
   });
 
+  const isCompactDensity = computed(() => themeDensity.value === "compact");
+
+  const antdComponentSize = computed<AntdComponentSize>(() => {
+    return isCompactDensity.value ? "small" : "middle";
+  });
+
   const antdThemeConfig = computed<AntdThemeConfig>(() => ({
-    algorithm: isDarkMode.value
-      ? antdTheme.darkAlgorithm
-      : antdTheme.defaultAlgorithm,
-    token: isDarkMode.value ? DARK_THEME_TOKEN : LIGHT_THEME_TOKEN,
-    components: (isDarkMode.value
-      ? DARK_COMPONENT_TOKEN
-      : LIGHT_COMPONENT_TOKEN) as AntdComponentThemeConfig,
+    algorithm: isCompactDensity.value
+      ? [
+          isDarkMode.value
+            ? antdTheme.darkAlgorithm
+            : antdTheme.defaultAlgorithm,
+          antdTheme.compactAlgorithm,
+        ]
+      : isDarkMode.value
+        ? antdTheme.darkAlgorithm
+        : antdTheme.defaultAlgorithm,
+    token: {
+      ...(isDarkMode.value ? DARK_THEME_TOKEN : LIGHT_THEME_TOKEN),
+      ...(isCompactDensity.value ? COMPACT_THEME_TOKEN : {}),
+    },
+    components: createComponentThemeConfig(
+      isDarkMode.value,
+      themeDensity.value,
+    ),
   }));
 
   /**
@@ -226,6 +300,14 @@ export function useThemeProvider(): ThemeProviderState {
     }
 
     themeMode.value = nextThemeMode;
+  }
+
+  function setThemeDensity(nextThemeDensity: ThemeDensity): void {
+    if (!THEME_DENSITY_VALUES.includes(nextThemeDensity)) {
+      return;
+    }
+
+    themeDensity.value = nextThemeDensity;
   }
 
   /**
@@ -244,6 +326,14 @@ export function useThemeProvider(): ThemeProviderState {
   );
 
   watch(
+    themeDensity,
+    (nextThemeDensity) => {
+      localStorage.setItem(THEME_DENSITY_STORAGE_KEY, nextThemeDensity);
+    },
+    { immediate: true },
+  );
+
+  watch(
     isDarkMode,
     (nextDarkMode) => {
       document.documentElement.dataset.theme = nextDarkMode ? "dark" : "light";
@@ -251,11 +341,23 @@ export function useThemeProvider(): ThemeProviderState {
     { immediate: true },
   );
 
+  watch(
+    themeDensity,
+    (nextThemeDensity) => {
+      document.documentElement.dataset.density = nextThemeDensity;
+    },
+    { immediate: true },
+  );
+
   return {
     themeMode,
+    themeDensity,
     isDarkMode,
+    isCompactDensity,
     antdThemeConfig,
+    antdComponentSize,
     toggleThemeMode,
     setThemeMode,
+    setThemeDensity,
   };
 }

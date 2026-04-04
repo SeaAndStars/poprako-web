@@ -66,6 +66,16 @@ export interface WorksetInfo {
   name: string;
   /** 工作集描述信息。 */
   description?: string;
+  /** 工作集封面地址。 */
+  cover_url?: string;
+  /** 工作集封面是否已上传。 */
+  is_cover_uploaded?: boolean;
+
+  /** 默认岗位用户 ID。 */
+  translator_user_id?: string;
+  proofreader_user_id?: string;
+  typesetter_user_id?: string;
+  reviewer_user_id?: string;
 
   /** 工作集在团队内排序索引。 */
   index?: number;
@@ -73,6 +83,11 @@ export interface WorksetInfo {
   comic_count?: number;
   /** 关联团队信息（includes 时可能返回）。 */
   team?: TeamInfo;
+  /** 默认岗位用户信息（includes 时可能返回）。 */
+  translator?: UserInfo;
+  proofreader?: UserInfo;
+  typesetter?: UserInfo;
+  reviewer?: UserInfo;
   /** 创建时间。 */
   created_at?: UnixTimestamp;
   /** 更新时间。 */
@@ -174,6 +189,8 @@ export interface AssignmentInfo {
   chapter_id: string;
   /** 被分配用户 ID。 */
   user_id: string;
+  /** 当前分工所属团队 ID。 */
+  assigned_team_id?: string;
 
   /** 各角色分配时间戳。 */
   assigned_raw_provider_at?: UnixTimestamp;
@@ -305,4 +322,10 @@ export interface UnitInfo {
   proofreader_comment?: string;
   translator_id?: string;
   proofreader_id?: string;
+  /** 实时协作版本号。 */
+  revision?: number;
+  /** 最近编辑者用户 ID。 */
+  last_edited_by?: string;
+  /** 最近编辑时间。 */
+  last_edited_at?: UnixTimestamp;
 }

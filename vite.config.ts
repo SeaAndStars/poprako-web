@@ -38,6 +38,14 @@ export default defineConfig(({ mode }) => {
       port: devPort,
       // Electron 开发模式依赖固定端口，避免 Vite 自动切换端口导致主进程加载失败。
       strictPort: true,
+      proxy: {
+        // 绕过本地开发环境下的 CDN 防机器人的 SameSite Cookie 多重重定向拦截限制
+        "/_dev_avatar_proxy/": {
+          target: "https://p1.seastarss.cn",
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/_dev_avatar_proxy\//, "/"),
+        },
+      },
     },
     preview: {
       host,

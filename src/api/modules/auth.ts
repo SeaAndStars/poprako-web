@@ -123,6 +123,11 @@ export interface ReserveUserAvatarResult {
  */
 export interface ReserveUserAvatarArgs {
   /**
+   * 上传图片扩展名，建议与最终文件格式保持一致。
+   */
+  extension?: string;
+
+  /**
    * 上传请求使用的 Content-Type，需要与后续 PUT 保持一致。
    */
   content_type?: string;

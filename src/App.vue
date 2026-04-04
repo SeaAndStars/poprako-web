@@ -1,5 +1,8 @@
 <template>
-  <a-config-provider :theme="antdThemeConfig">
+  <a-config-provider
+    :theme="antdThemeConfig"
+    :component-size="antdComponentSize"
+  >
     <div
       class="application-shell"
       :class="{ 'application-shell--desktop': isDesktopEnvironment }"
@@ -18,7 +21,9 @@
         <aside v-if="showSidebar" class="application-shell__sidebar-container">
           <DesktopSidebar
             :theme-mode="themeMode"
+            :theme-density="themeDensity"
             @theme-mode-change="setThemeMode"
+            @theme-density-change="setThemeDensity"
           />
         </aside>
 
@@ -47,16 +52,25 @@ import DesktopSidebar from "./components/DesktopSidebar.vue";
 import DesktopTitleBar from "./components/DesktopTitleBar.vue";
 import { useThemeProvider } from "./theme/provider";
 
-const { themeMode, antdThemeConfig, setThemeMode } = useThemeProvider();
+const {
+  themeMode,
+  themeDensity,
+  antdThemeConfig,
+  antdComponentSize,
+  setThemeMode,
+  setThemeDensity,
+} = useThemeProvider();
 const route = useRoute();
 const isDesktopEnvironment = computed(() =>
   Boolean(window.poprakoDesktop?.windowControls),
 );
-const isLoginRoute = computed(() => route.name === "login");
+const isAuthRoute = computed(() => {
+  return route.name === "login" || route.name === "register";
+});
 const isTranslatorRoute = computed(() => route.name === "translator");
 const showTitlebar = computed(() => true);
 const showSidebar = computed(
-  () => !isLoginRoute.value && !isTranslatorRoute.value,
+  () => !isAuthRoute.value && !isTranslatorRoute.value,
 );
 const showFullBleedContent = computed(() => !showSidebar.value);
 const DESKTOP_SHELL_CLASS_NAME = "desktop-shell";

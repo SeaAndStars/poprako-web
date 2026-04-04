@@ -125,7 +125,7 @@
               class="sidebar-qq-subpanel"
               :style="subPanelStyle"
             >
-              <div class="sidebar-qq-subpanel__title">主题设置</div>
+              <div class="sidebar-qq-subpanel__title">主题模式</div>
               <button
                 type="button"
                 class="sidebar-qq-subpanel__item"
@@ -156,6 +156,31 @@
                 <span>深色主题</span>
                 <CheckOutlined
                   v-if="themeMode === 'dark'"
+                  class="sidebar-qq-subpanel__check"
+                />
+              </button>
+
+              <div class="sidebar-qq-subpanel__divider" />
+              <div class="sidebar-qq-subpanel__title">界面密度</div>
+              <button
+                type="button"
+                class="sidebar-qq-subpanel__item"
+                @click="handleThemeDensitySelect('comfortable')"
+              >
+                <span>舒展模式</span>
+                <CheckOutlined
+                  v-if="themeDensity === 'comfortable'"
+                  class="sidebar-qq-subpanel__check"
+                />
+              </button>
+              <button
+                type="button"
+                class="sidebar-qq-subpanel__item"
+                @click="handleThemeDensitySelect('compact')"
+              >
+                <span>紧凑模式</span>
+                <CheckOutlined
+                  v-if="themeDensity === 'compact'"
                   class="sidebar-qq-subpanel__check"
                 />
               </button>
@@ -191,6 +216,7 @@ import {
   BookOutlined,
   CheckOutlined,
   DashboardOutlined,
+  FolderOpenOutlined,
   LockOutlined,
   MenuOutlined,
   PoweroffOutlined,
@@ -202,7 +228,7 @@ import {
   TeamOutlined,
 } from "@ant-design/icons-vue";
 import { useAuthStore } from "../stores/auth";
-import type { ThemeMode } from "../theme/provider";
+import type { ThemeDensity, ThemeMode } from "../theme/provider";
 
 type SubPanelKey = "theme" | "help";
 
@@ -229,9 +255,11 @@ const router = useRouter();
 const authStore = useAuthStore();
 defineProps<{
   themeMode: ThemeMode;
+  themeDensity: ThemeDensity;
 }>();
 const emit = defineEmits<{
   (event: "theme-mode-change", themeMode: ThemeMode): void;
+  (event: "theme-density-change", themeDensity: ThemeDensity): void;
 }>();
 const isActionMenuOpen = ref(false);
 const activeSubPanelKey = ref<SubPanelKey | null>(null);
@@ -268,6 +296,12 @@ const sidebarItems: ReadonlyArray<SidebarItem> = [
     to: "/workspace",
   },
   {
+    key: "worksets",
+    label: "漫画工作集",
+    icon: FolderOpenOutlined,
+    to: "/worksets",
+  },
+  {
     key: "comic-playground",
     label: "漫画广场",
     icon: BookOutlined,
@@ -275,7 +309,7 @@ const sidebarItems: ReadonlyArray<SidebarItem> = [
   },
   {
     key: "member-list",
-    label: "成员一览",
+    label: "团队管理",
     icon: TeamOutlined,
     to: "/member-list",
   },
@@ -291,6 +325,10 @@ const sidebarItems: ReadonlyArray<SidebarItem> = [
  * 根据当前路由返回侧栏选中项。
  */
 const activeSidebarKey = computed(() => {
+  if (route.path.startsWith("/worksets")) {
+    return "worksets";
+  }
+
   if (route.path === "/comic-playground") {
     return "comic-playground";
   }
@@ -472,6 +510,11 @@ function handleLogoutClick(): void {
 
 function handleThemeModeSelect(nextThemeMode: ThemeMode): void {
   emit("theme-mode-change", nextThemeMode);
+  closeActionMenu();
+}
+
+function handleThemeDensitySelect(nextThemeDensity: ThemeDensity): void {
+  emit("theme-density-change", nextThemeDensity);
   closeActionMenu();
 }
 </script>
@@ -690,6 +733,13 @@ function handleThemeModeSelect(nextThemeMode: ThemeMode): void {
   font-size: 12px;
   color: var(--text-muted);
   padding: 2px 6px 6px;
+}
+
+:global(.sidebar-qq-subpanel__divider) {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--panel-border);
+  opacity: 0.58;
 }
 
 :global(.sidebar-qq-subpanel__item) {

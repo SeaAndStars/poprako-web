@@ -62,6 +62,12 @@ export interface LocalProjectUnit {
   translator_comment: string;
   /** 校对备注。 */
   proofreader_comment: string;
+  /** 本地协作版本号，用于标记最近一次改动。 */
+  revision: number;
+  /** 最近编辑者显示名。 */
+  last_edited_by?: string;
+  /** 最近编辑时间，统一使用 Unix 毫秒时间戳。 */
+  last_edited_at?: number;
 }
 
 export const MIN_LOCAL_PROJECT_UNIT_BOX_WIDTH_RATIO = 0.04;
@@ -71,9 +77,22 @@ export const MAX_LOCAL_PROJECT_UNIT_BOX_HEIGHT_RATIO = 0.9;
 
 type LocalProjectUnitGeometryCompatible = Omit<
   LocalProjectUnit,
-  "box_width_ratio" | "box_height_ratio"
+  | "box_width_ratio"
+  | "box_height_ratio"
+  | "revision"
+  | "last_edited_by"
+  | "last_edited_at"
 > &
-  Partial<Pick<LocalProjectUnit, "box_width_ratio" | "box_height_ratio">>;
+  Partial<
+    Pick<
+      LocalProjectUnit,
+      | "box_width_ratio"
+      | "box_height_ratio"
+      | "revision"
+      | "last_edited_by"
+      | "last_edited_at"
+    >
+  >;
 
 /**
  * 为不同类型的文本框提供默认尺寸。
@@ -130,6 +149,9 @@ export function normalizeLocalProjectUnitGeometry(
     MIN_LOCAL_PROJECT_UNIT_BOX_HEIGHT_RATIO,
     MAX_LOCAL_PROJECT_UNIT_BOX_HEIGHT_RATIO,
   );
+  const normalizedRevision = Number.isFinite(projectUnit.revision)
+    ? Math.max(1, Math.trunc(projectUnit.revision ?? 1))
+    : 1;
 
   return {
     ...projectUnit,
@@ -145,6 +167,13 @@ export function normalizeLocalProjectUnitGeometry(
     ),
     box_width_ratio: boxWidthRatio,
     box_height_ratio: boxHeightRatio,
+    revision: normalizedRevision,
+    last_edited_by: projectUnit.last_edited_by?.trim() || undefined,
+    last_edited_at:
+      typeof projectUnit.last_edited_at === "number" &&
+      Number.isFinite(projectUnit.last_edited_at)
+        ? projectUnit.last_edited_at
+        : undefined,
   };
 }
 

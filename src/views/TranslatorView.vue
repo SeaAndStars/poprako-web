@@ -28,20 +28,23 @@
           &lt;
         </a-button>
 
-        <form
-          class="translator-header__page-jump"
-          @submit.prevent="submitPageJump"
-        >
-          <input
-            v-model="pageInputValue"
-            class="translator-header__page-input"
-            inputmode="numeric"
-            aria-label="跳转页码"
-          />
-        </form>
+        <a-select
+          class="translator-header__page-select"
+          :value="currentPageIndex"
+          size="small"
+          :options="pageSelectOptions"
+          @change="handlePageSelectChange"
+        />
 
         <span class="translator-header__page-total">
-          / {{ projectRecord.page_count }}
+          共 {{ projectRecord.page_count }} 页
+        </span>
+
+        <span
+          class="translator-header__page-status"
+          :class="{ 'is-readonly': isCurrentPageLockedByOther }"
+        >
+          {{ currentPageStatusText }}
         </span>
 
         <a-button
@@ -191,13 +194,16 @@
               <span class="translator-unit-card__num">{{
                 String(projectUnit.index).padStart(2, "0")
               }}</span>
-              <span
+              <button
                 v-if="projectUnit.id === selectedUnitID"
+                type="button"
                 class="translator-unit-card__type-toggle"
                 :class="projectUnit.is_bubble ? 'is-inbox' : 'is-outbox'"
+                :disabled="!currentPageCanMutateStructure"
                 @click.stop="toggleSelectedUnitBubble"
-                >{{ projectUnit.is_bubble ? "内" : "外" }}</span
               >
+                {{ projectUnit.is_bubble ? "内" : "外" }}
+              </button>
             </div>
 
             <!-- 内容区 -->
@@ -321,14 +327,16 @@
                     <textarea
                       data-field="translated_text"
                       class="translator-unit-card__textarea"
+                      :class="{ 'is-readonly': !currentPageCanEditTranslate }"
                       :value="projectUnit.translated_text"
+                      :readonly="!currentPageCanEditTranslate"
                       :placeholder="
                         editorMode === 'translate'
                           ? '请输入翻译．．．'
                           : '翻译文本'
                       "
                       rows="1"
-                      @focus="handleUnitFieldFocus('translated_text')"
+                      @focus="handleUnitFieldFocus('translated_text', $event)"
                       @blur="handleUnitFieldBlur"
                       @input="handleTextFieldInput('translated_text', $event)"
                       @click.stop
@@ -336,6 +344,7 @@
                     <button
                       type="button"
                       class="translator-unit-card__field-btn"
+                      :disabled="!currentPageCanEditTranslate"
                       title="清空翻译"
                       @click.stop="clearFieldValue('translated_text')"
                     >
@@ -374,10 +383,12 @@
                     <textarea
                       data-field="proofread_text"
                       class="translator-unit-card__textarea"
+                      :class="{ 'is-readonly': !currentPageCanEditProofread }"
                       :value="projectUnit.proofread_text"
+                      :readonly="!currentPageCanEditProofread"
                       placeholder="请输入校对．．．"
                       rows="1"
-                      @focus="handleUnitFieldFocus('proofread_text')"
+                      @focus="handleUnitFieldFocus('proofread_text', $event)"
                       @blur="handleUnitFieldBlur"
                       @input="handleTextFieldInput('proofread_text', $event)"
                       @click.stop
@@ -385,6 +396,7 @@
                     <button
                       type="button"
                       class="translator-unit-card__field-btn"
+                      :disabled="!currentPageCanEditProofread"
                       title="清空校对"
                       @click.stop="clearFieldValue('proofread_text')"
                     >
@@ -400,6 +412,7 @@
                     :key="symbolValue"
                     type="button"
                     class="translator-unit-card__symbol-btn"
+                    :disabled="!isCurrentFieldEditable"
                     @click.stop="insertQuickSymbol(symbolValue)"
                   >
                     {{ symbolValue }}
@@ -413,6 +426,7 @@
               <button
                 v-if="
                   projectUnit.id === selectedUnitID &&
+                  editorMode === 'proofread' &&
                   !hasTextContent(projectUnit.proofread_text)
                 "
                 type="button"
@@ -421,6 +435,7 @@
                   'is-checked': isUnitProofread(projectUnit),
                   'is-direct-pass': canDirectPassProofread(projectUnit),
                 }"
+                :disabled="!canToggleProofreadAction"
                 :title="resolveProofreadActionTitle(projectUnit)"
                 @click.stop="toggleSelectedUnitProofread"
               >
@@ -461,11 +476,19 @@
         <span class="translator-footer__info-item">
           {{ currentPageUnits.length }} 标记
         </span>
+        <span
+          class="translator-footer__info-item"
+          :class="{ 'is-highlight': isCurrentPageLockedByOther }"
+        >
+          {{ currentPageStatusText }}
+        </span>
       </div>
       <div class="translator-footer__right">
-        <span class="translator-footer__hint">
-          左键：框内 · 右键：框外 · 右键标记：删除 · ↑/↓：切换 · Space：编辑 ·
-          Enter：保存 · Shift+Enter：换行 · Esc：退出 · Ctrl+滚轮：缩放
+        <span
+          class="translator-footer__hint"
+          :class="{ 'is-readonly': isCurrentPageLockedByOther }"
+        >
+          {{ footerHintText }}
         </span>
         <span class="translator-footer__zoom">{{ zoomDisplayText }}</span>
         <button class="translator-footer__mode-btn" @click="toggleEditorMode">
@@ -498,6 +521,23 @@
  * 页面负责项目页切换、图片标记、翻译/校对文本编辑以及快捷符号插入。
  */
 import {
+  buildLocalProjectCollaborationKey,
+  buildLocalProjectPageCollaborationKey,
+  resolveTranslatorModeLabel,
+  type TranslatorMode,
+} from "../local-project/collaboration";
+import { resolveLocalProjectImageURL } from "../local-project/assets";
+import type { LocalProjectUnit } from "../local-project/types";
+import { getDefaultLocalProjectUnitBoxSize } from "../local-project/types";
+import { useAuthStore } from "../stores/auth";
+import { useLocalProjectsStore } from "../stores/localProjects";
+import { useSpecialSymbolsStore } from "../stores/specialSymbols";
+import {
+  useTranslatorCollaborationStore,
+  type TranslatorPageSnapshot,
+} from "../stores/translatorCollaboration";
+import type { UserInfo } from "../types/domain";
+import {
   computed,
   nextTick,
   onBeforeUnmount,
@@ -509,15 +549,7 @@ import { Modal, message } from "ant-design-vue";
 import { storeToRefs } from "pinia";
 import { useRoute, useRouter } from "vue-router";
 import { getCurrentUserProfile } from "../api/modules";
-import { resolveLocalProjectImageURL } from "../local-project/assets";
-import type { LocalProjectUnit } from "../local-project/types";
-import { getDefaultLocalProjectUnitBoxSize } from "../local-project/types";
-import { useAuthStore } from "../stores/auth";
-import { useLocalProjectsStore } from "../stores/localProjects";
-import { useSpecialSymbolsStore } from "../stores/specialSymbols";
-import type { UserInfo } from "../types/domain";
-
-type TranslatorMode = "translate" | "proofread";
+import { resolveAssetUrl } from "../api/objectStorage";
 type EditableFieldKey = "translated_text" | "proofread_text";
 
 const route = useRoute();
@@ -525,8 +557,17 @@ const router = useRouter();
 const authStore = useAuthStore();
 const localProjectsStore = useLocalProjectsStore();
 const specialSymbolsStore = useSpecialSymbolsStore();
+const translatorCollaborationStore = useTranslatorCollaborationStore();
 const { projects } = storeToRefs(localProjectsStore);
 const { customSymbols } = storeToRefs(specialSymbolsStore);
+const {
+  currentPageEditor,
+  hasCurrentPageLock,
+  isConnected: isCollaborationConnected,
+  isCurrentPageLockedByOther,
+  pageEditorsByPageKey,
+  pageSnapshots,
+} = storeToRefs(translatorCollaborationStore);
 
 const stageOverlayRef = ref<HTMLElement | null>(null);
 const isDarkTheme = ref(document.documentElement.dataset.theme === "dark");
@@ -536,12 +577,12 @@ let themeObserver: MutationObserver | null = null;
 const editorMode = ref<TranslatorMode>("translate");
 const activeTextField = ref<EditableFieldKey>("translated_text");
 const currentPageIndex = ref(0);
-const pageInputValue = ref("1");
 const currentPageImageURL = ref<string | null>(null);
 const imageLoading = ref(false);
 const currentPageUnits = ref<LocalProjectUnit[]>([]);
 const selectedUnitID = ref<string | null>(null);
 const editingUnitID = ref<string | null>(null);
+const isAcquiringPageLock = ref(false);
 
 /* ── 图片缩放 & 平移状态 ── */
 const stageScale = ref(1);
@@ -580,6 +621,25 @@ const currentPageMeta = computed(() => {
 
 const currentPageID = computed(() => currentPageMeta.value?.id ?? null);
 
+const projectCollaborationKey = computed(() => {
+  if (!projectRecord.value) {
+    return "";
+  }
+
+  return buildLocalProjectCollaborationKey(projectRecord.value);
+});
+
+const currentPageCollaborationKey = computed(() => {
+  if (!projectRecord.value || !currentPageMeta.value) {
+    return "";
+  }
+
+  return buildLocalProjectPageCollaborationKey(
+    projectRecord.value,
+    currentPageMeta.value,
+  );
+});
+
 const selectedUnit = computed(() => {
   return (
     currentPageUnits.value.find(
@@ -597,15 +657,118 @@ const currentUserDisplayName = computed(() => {
 });
 
 const currentUserAvatarURL = computed(() => {
-  return (
-    currentUserProfile.value?.avatar_url ||
-    currentUserProfile.value?.avatar ||
-    ""
+  return resolveAssetUrl(
+    currentUserProfile.value?.avatar_url || currentUserProfile.value?.avatar,
   );
 });
 
 const currentUserInitial = computed(() => {
   return currentUserDisplayName.value.trim().charAt(0).toUpperCase() || "协";
+});
+
+const currentPageSnapshot = computed<TranslatorPageSnapshot | null>(() => {
+  if (!currentPageCollaborationKey.value) {
+    return null;
+  }
+
+  return pageSnapshots.value[currentPageCollaborationKey.value] ?? null;
+});
+
+const currentPageStatusText = computed(() => {
+  if (!authStore.isLoggedIn || !currentUserProfile.value?.id) {
+    return "未登录，仅本地编辑";
+  }
+
+  if (!isCollaborationConnected.value) {
+    return "协作离线，仅本地编辑";
+  }
+
+  if (!currentPageEditor.value) {
+    return "当前页空闲";
+  }
+
+  const currentEditorName =
+    currentPageEditor.value.user_id === currentUserProfile.value.id
+      ? "你"
+      : currentPageEditor.value.display_name;
+
+  return `${currentEditorName}正在${resolveTranslatorModeLabel(currentPageEditor.value.mode)}`;
+});
+
+const currentPageLockHint = computed(() => {
+  if (!currentPageEditor.value || !isCurrentPageLockedByOther.value) {
+    return currentPageStatusText.value;
+  }
+
+  return `${currentPageEditor.value.display_name} 正在${resolveTranslatorModeLabel(currentPageEditor.value.mode)}，当前页面仅可查看`;
+});
+
+const currentPageCanEditTranslate = computed(() => {
+  return (
+    editorMode.value === "translate" &&
+    !isCurrentPageLockedByOther.value &&
+    !isAcquiringPageLock.value
+  );
+});
+
+const currentPageCanEditProofread = computed(() => {
+  return (
+    editorMode.value === "proofread" &&
+    !isCurrentPageLockedByOther.value &&
+    !isAcquiringPageLock.value
+  );
+});
+
+const currentPageCanMutateStructure = computed(() => {
+  return (
+    editorMode.value === "translate" &&
+    !isCurrentPageLockedByOther.value &&
+    !isAcquiringPageLock.value
+  );
+});
+
+const canToggleProofreadAction = computed(() => {
+  return (
+    editorMode.value === "proofread" &&
+    !isCurrentPageLockedByOther.value &&
+    !isAcquiringPageLock.value
+  );
+});
+
+const isCurrentFieldEditable = computed(() => {
+  return activeTextField.value === "proofread_text"
+    ? currentPageCanEditProofread.value
+    : currentPageCanEditTranslate.value;
+});
+
+const pageSelectOptions = computed(() => {
+  if (!projectRecord.value) {
+    return [];
+  }
+
+  return projectRecord.value.pages.map((projectPage, index) => {
+    const pageKey = buildLocalProjectPageCollaborationKey(
+      projectRecord.value!,
+      projectPage,
+    );
+    const pageEditor = pageEditorsByPageKey.value[pageKey];
+    const pageStatusText = pageEditor
+      ? ` · ${pageEditor.display_name}正在${resolveTranslatorModeLabel(pageEditor.mode)}`
+      : "";
+
+    return {
+      value: index,
+      label: `第 ${projectPage.index} 页${pageStatusText}`,
+    };
+  });
+});
+
+const footerHintText = computed(() => {
+  if (isCurrentPageLockedByOther.value) {
+    return `${currentPageLockHint.value}，请切换到其他页面继续处理。`;
+  }
+
+  return "左键：框内 · 右键：框外 · 右键标记：删除 · ↑/↓：切换 · Space：编辑 · Enter：保存 · Shift+Enter：换行 · Esc：退出 · Ctrl+滚轮：缩放";
 });
 
 const currentPageTranslatedCount = computed(() => {
@@ -635,6 +798,7 @@ const pageUntranslatedCount = computed(() => {
 });
 
 let currentImageResolveToken = 0;
+let lastCollaborationFallbackAt = 0;
 
 watch(
   projectRecord,
@@ -654,7 +818,6 @@ watch(
     );
 
     currentPageIndex.value = Number.isFinite(nextPageIndex) ? nextPageIndex : 0;
-    pageInputValue.value = String(currentPageIndex.value + 1);
   },
   { immediate: true },
 );
@@ -669,6 +832,7 @@ watch(
       selectedUnitID.value = null;
       editingUnitID.value = null;
       currentPageImageURL.value = null;
+      await translatorCollaborationStore.disconnectProjectSession();
       return;
     }
 
@@ -680,8 +844,8 @@ watch(
     );
     selectedUnitID.value = currentPageUnits.value[0]?.id ?? null;
     editingUnitID.value = null;
-    pageInputValue.value = String(currentPageIndex.value + 1);
     resetStageTransform();
+    void syncCurrentPageCollaborationSession();
 
     imageLoading.value = true;
     const resolveToken = ++currentImageResolveToken;
@@ -709,12 +873,38 @@ watch(editorMode, (nextMode) => {
     nextMode === "proofread" ? "proofread_text" : "translated_text";
 
   if (!selectedUnitID.value) {
+    void syncCurrentPageLockMode();
     return;
   }
 
   focusActiveFieldLater(
     Boolean(resolveSelectedTextareaTarget(document.activeElement)),
   );
+  void syncCurrentPageLockMode();
+});
+
+watch(currentPageSnapshot, (nextSnapshot) => {
+  if (!nextSnapshot) {
+    return;
+  }
+
+  if (
+    nextSnapshot.updated_by_user_id === currentUserProfile.value?.id &&
+    hasCurrentPageLock.value
+  ) {
+    return;
+  }
+
+  applyIncomingPageSnapshot(nextSnapshot);
+});
+
+watch(isCurrentPageLockedByOther, (lockedByOther) => {
+  if (!lockedByOther) {
+    return;
+  }
+
+  resolveActiveFieldElement()?.blur();
+  editingUnitID.value = null;
 });
 
 /**
@@ -724,6 +914,161 @@ function cloneUnits(units: LocalProjectUnit[]): LocalProjectUnit[] {
   return units.map((projectUnit) => ({
     ...projectUnit,
   }));
+}
+
+/**
+ * 生成用于本地协作的“最近编辑信息”。
+ */
+function buildTouchedUnit(
+  projectUnit: LocalProjectUnit,
+  patch: Partial<LocalProjectUnit>,
+): LocalProjectUnit {
+  return {
+    ...projectUnit,
+    ...patch,
+    revision: Math.max(projectUnit.revision ?? 1, 1) + 1,
+    last_edited_by: currentUserDisplayName.value,
+    last_edited_at: Date.now(),
+  };
+}
+
+/**
+ * 统一应用远端页面快照，并同步回本地持久化层。
+ */
+function applyIncomingPageSnapshot(snapshot: TranslatorPageSnapshot): void {
+  if (
+    !projectRecord.value ||
+    !currentPageMeta.value ||
+    snapshot.page_key !== currentPageCollaborationKey.value
+  ) {
+    return;
+  }
+
+  const nextUnits = cloneUnits(snapshot.units);
+  currentPageUnits.value = nextUnits;
+
+  localProjectsStore.replacePageUnits(
+    projectRecord.value.id,
+    currentPageMeta.value.id,
+    nextUnits,
+  );
+
+  if (
+    selectedUnitID.value &&
+    !nextUnits.some((projectUnit) => projectUnit.id === selectedUnitID.value)
+  ) {
+    selectedUnitID.value = nextUnits[0]?.id ?? null;
+  }
+
+  if (
+    editingUnitID.value &&
+    !nextUnits.some((projectUnit) => projectUnit.id === editingUnitID.value)
+  ) {
+    editingUnitID.value = null;
+  }
+
+  focusActiveFieldLater(false);
+}
+
+function handlePageSelectChange(nextPageIndex: number): void {
+  moveToPage(Number(nextPageIndex));
+}
+
+function notifyCollaborationFallback(messageText: string): void {
+  const now = Date.now();
+  if (now - lastCollaborationFallbackAt < 2500) {
+    return;
+  }
+
+  lastCollaborationFallbackAt = now;
+  message.warning(messageText);
+}
+
+async function syncCurrentPageCollaborationSession(): Promise<void> {
+  if (!projectRecord.value || !currentPageMeta.value) {
+    await translatorCollaborationStore.disconnectProjectSession();
+    return;
+  }
+
+  if (!authStore.isLoggedIn || !currentUserProfile.value?.id) {
+    await translatorCollaborationStore.disconnectProjectSession();
+    return;
+  }
+
+  try {
+    await translatorCollaborationStore.connectProjectSession({
+      project_key: projectCollaborationKey.value,
+      user_id: currentUserProfile.value.id,
+      display_name: currentUserDisplayName.value,
+      avatar_url: currentUserAvatarURL.value || undefined,
+    });
+
+    const remoteSnapshot = await translatorCollaborationStore.openPage({
+      project_key: projectCollaborationKey.value,
+      page_key: currentPageCollaborationKey.value,
+      page_index: currentPageMeta.value.index,
+      page_name: currentPageMeta.value.name,
+      units: currentPageUnits.value,
+    });
+
+    if (remoteSnapshot) {
+      applyIncomingPageSnapshot(remoteSnapshot);
+    }
+  } catch (error) {
+    console.error("[translator] 实时协作连接失败:", error);
+    notifyCollaborationFallback("实时协作连接失败，当前继续使用本地编辑");
+  }
+}
+
+async function syncCurrentPageLockMode(): Promise<void> {
+  try {
+    await translatorCollaborationStore.updateActiveMode(editorMode.value);
+  } catch (error) {
+    console.error("[translator] 页面锁模式同步失败:", error);
+  }
+}
+
+async function ensureCurrentPageEditLock(
+  mode: TranslatorMode,
+): Promise<boolean> {
+  if (!authStore.isLoggedIn || !currentUserProfile.value?.id) {
+    return true;
+  }
+
+  if (isCurrentPageLockedByOther.value) {
+    message.warning(currentPageLockHint.value);
+    return false;
+  }
+
+  if (hasCurrentPageLock.value) {
+    if (currentPageEditor.value?.mode !== mode) {
+      await syncCurrentPageLockMode();
+    }
+
+    return true;
+  }
+
+  try {
+    if (!isCollaborationConnected.value) {
+      await syncCurrentPageCollaborationSession();
+    }
+
+    isAcquiringPageLock.value = true;
+    const acquired =
+      await translatorCollaborationStore.tryAcquirePageLock(mode);
+
+    if (!acquired) {
+      message.warning(currentPageLockHint.value);
+    }
+
+    return acquired;
+  } catch (error) {
+    console.error("[translator] 获取页面锁失败:", error);
+    notifyCollaborationFallback("协作服务暂不可用，当前退回本地编辑");
+    return true;
+  } finally {
+    isAcquiringPageLock.value = false;
+  }
 }
 
 /**
@@ -776,6 +1121,8 @@ function persistCurrentPageUnits(nextUnits: LocalProjectUnit[]): void {
     currentPageMeta.value.id,
     currentPageUnits.value,
   );
+
+  translatorCollaborationStore.schedulePageSnapshotSync(currentPageUnits.value);
 }
 
 /**
@@ -808,6 +1155,8 @@ function handleReturnToWorkspace(): void {
     );
   }
 
+  void translatorCollaborationStore.disconnectProjectSession();
+
   void router.push("/workspace");
 }
 
@@ -825,7 +1174,6 @@ function moveToPage(nextPageIndex: number): void {
   );
 
   currentPageIndex.value = clampedIndex;
-  pageInputValue.value = String(clampedIndex + 1);
   localProjectsStore.updateLastPageIndex(projectRecord.value.id, clampedIndex);
 }
 
@@ -838,27 +1186,21 @@ function moveToNextPage(): void {
 }
 
 /**
- * 提交页码跳转。
- */
-function submitPageJump(): void {
-  if (!projectRecord.value) {
-    return;
-  }
-
-  const parsedPage = Number(pageInputValue.value);
-
-  if (!Number.isInteger(parsedPage)) {
-    pageInputValue.value = String(currentPageIndex.value + 1);
-    return;
-  }
-
-  moveToPage(parsedPage - 1);
-}
-
-/**
  * 根据点击位置在画布上创建新标记。
  */
-function createUnitAtPointer(event: MouseEvent, isBubble: boolean): void {
+async function createUnitAtPointer(
+  event: MouseEvent,
+  isBubble: boolean,
+): Promise<void> {
+  if (!currentPageCanMutateStructure.value) {
+    message.warning(currentPageLockHint.value);
+    return;
+  }
+
+  if (!(await ensureCurrentPageEditLock("translate"))) {
+    return;
+  }
+
   const overlayElement = stageOverlayRef.value;
 
   if (!overlayElement) {
@@ -881,6 +1223,9 @@ function createUnitAtPointer(event: MouseEvent, isBubble: boolean): void {
     proofread_text: "",
     translator_comment: "",
     proofreader_comment: "",
+    revision: 1,
+    last_edited_by: currentUserDisplayName.value,
+    last_edited_at: Date.now(),
   };
 
   persistCurrentPageUnits([...currentPageUnits.value, newUnit]);
@@ -923,7 +1268,7 @@ function handleOverlayClick(event: MouseEvent): void {
     return;
   }
 
-  createUnitAtPointer(event, true);
+  void createUnitAtPointer(event, true);
 }
 
 function handleOverlayContextMenu(event: MouseEvent): void {
@@ -934,7 +1279,7 @@ function handleOverlayContextMenu(event: MouseEvent): void {
     return;
   }
 
-  createUnitAtPointer(event, false);
+  void createUnitAtPointer(event, false);
 }
 
 /**
@@ -962,10 +1307,9 @@ function updateSelectedUnitField(
       return projectUnit;
     }
 
-    return {
-      ...projectUnit,
+    return buildTouchedUnit(projectUnit, {
       [field]: nextValue,
-    } as LocalProjectUnit;
+    } as Partial<LocalProjectUnit>);
   });
 
   persistCurrentPageUnits(nextUnits);
@@ -984,13 +1328,32 @@ function handleTextFieldInput(field: EditableFieldKey, event: Event): void {
 /**
  * 清空选中标记的指定字段。
  */
-function clearFieldValue(field: EditableFieldKey): void {
+async function clearFieldValue(field: EditableFieldKey): Promise<void> {
+  const requiredMode = field === "proofread_text" ? "proofread" : "translate";
+  if (!(await ensureCurrentPageEditLock(requiredMode))) {
+    return;
+  }
+
   updateSelectedUnitField(field, "");
   focusActiveFieldLater();
 }
 
-function handleUnitFieldFocus(field: EditableFieldKey): void {
+async function handleUnitFieldFocus(
+  field: EditableFieldKey,
+  event: FocusEvent,
+): Promise<void> {
   activeTextField.value = field;
+
+  const requiredMode = field === "proofread_text" ? "proofread" : "translate";
+  if (editorMode.value !== requiredMode) {
+    return;
+  }
+
+  if (!(await ensureCurrentPageEditLock(requiredMode))) {
+    (event.target as HTMLTextAreaElement | null)?.blur();
+    return;
+  }
+
   editingUnitID.value = selectedUnitID.value;
 }
 
@@ -1037,8 +1400,17 @@ function resolveProofreadActionTitle(projectUnit: LocalProjectUnit): string {
 /**
  * 切换框内/框外。
  */
-function toggleSelectedUnitBubble(): void {
+async function toggleSelectedUnitBubble(): Promise<void> {
   if (!selectedUnit.value) {
+    return;
+  }
+
+  if (!currentPageCanMutateStructure.value) {
+    message.warning(currentPageLockHint.value);
+    return;
+  }
+
+  if (!(await ensureCurrentPageEditLock("translate"))) {
     return;
   }
 
@@ -1047,10 +1419,9 @@ function toggleSelectedUnitBubble(): void {
       return projectUnit;
     }
 
-    return {
-      ...projectUnit,
+    return buildTouchedUnit(projectUnit, {
       is_bubble: !projectUnit.is_bubble,
-    };
+    });
   });
 
   persistCurrentPageUnits(nextUnits);
@@ -1059,8 +1430,17 @@ function toggleSelectedUnitBubble(): void {
 /**
  * 切换校对状态。
  */
-function toggleSelectedUnitProofread(): void {
+async function toggleSelectedUnitProofread(): Promise<void> {
   if (!selectedUnit.value) {
+    return;
+  }
+
+  if (!canToggleProofreadAction.value) {
+    message.warning(currentPageLockHint.value);
+    return;
+  }
+
+  if (!(await ensureCurrentPageEditLock("proofread"))) {
     return;
   }
 
@@ -1069,10 +1449,9 @@ function toggleSelectedUnitProofread(): void {
       return projectUnit;
     }
 
-    return {
-      ...projectUnit,
+    return buildTouchedUnit(projectUnit, {
       is_proofread: !projectUnit.is_proofread,
-    };
+    });
   });
 
   persistCurrentPageUnits(nextUnits);
@@ -1081,7 +1460,16 @@ function toggleSelectedUnitProofread(): void {
 /**
  * 删除指定标记。
  */
-function requestRemoveUnit(unitID: string): void {
+async function requestRemoveUnit(unitID: string): Promise<void> {
+  if (!currentPageCanMutateStructure.value) {
+    message.warning(currentPageLockHint.value);
+    return;
+  }
+
+  if (!(await ensureCurrentPageEditLock("translate"))) {
+    return;
+  }
+
   const targetUnit = currentPageUnits.value.find(
     (projectUnit) => projectUnit.id === unitID,
   );
@@ -1253,7 +1641,7 @@ function focusActiveFieldLater(shouldFocus = true): void {
           textareaElement.style.height = `${textareaElement.scrollHeight}px`;
         });
 
-      if (shouldFocus) {
+      if (shouldFocus && isCurrentFieldEditable.value) {
         resolveActiveFieldElement()?.focus();
       }
 
@@ -1265,8 +1653,14 @@ function focusActiveFieldLater(shouldFocus = true): void {
 /**
  * 向当前激活文本框插入快捷符号。
  */
-function insertQuickSymbol(symbolValue: string): void {
+async function insertQuickSymbol(symbolValue: string): Promise<void> {
   if (!selectedUnit.value) {
+    return;
+  }
+
+  const requiredMode =
+    activeTextField.value === "proofread_text" ? "proofread" : "translate";
+  if (!(await ensureCurrentPageEditLock(requiredMode))) {
     return;
   }
 
@@ -1415,15 +1809,27 @@ function handleGlobalMouseUp(event: MouseEvent): void {
 
 /* ── 标记拖拽 ── */
 function handleMarkerDragStart(event: MouseEvent, unitID: string): void {
+  if (!currentPageCanMutateStructure.value) {
+    message.warning(currentPageLockHint.value);
+    return;
+  }
+
   const unit = currentPageUnits.value.find((u) => u.id === unitID);
   if (!unit) return;
-  draggingUnitID.value = unitID;
-  markerDragStartX = event.clientX;
-  markerDragStartY = event.clientY;
-  markerDragOrigX = unit.x_coord;
-  markerDragOrigY = unit.y_coord;
-  markerDragMoved = false;
-  event.preventDefault();
+
+  void (async () => {
+    if (!(await ensureCurrentPageEditLock("translate"))) {
+      return;
+    }
+
+    draggingUnitID.value = unitID;
+    markerDragStartX = event.clientX;
+    markerDragStartY = event.clientY;
+    markerDragOrigX = unit.x_coord;
+    markerDragOrigY = unit.y_coord;
+    markerDragMoved = false;
+    event.preventDefault();
+  })();
 }
 
 function handleMarkerDragMove(event: MouseEvent): void {
@@ -1442,11 +1848,10 @@ function handleMarkerDragMove(event: MouseEvent): void {
 
   const nextUnits = currentPageUnits.value.map((u) => {
     if (u.id !== draggingUnitID.value) return u;
-    return {
-      ...u,
+    return buildTouchedUnit(u, {
       x_coord: Math.max(0, Math.min(1, nextX)),
       y_coord: Math.max(0, Math.min(1, nextY)),
-    };
+    });
   });
   persistCurrentPageUnits(nextUnits);
 }
@@ -1478,6 +1883,7 @@ function syncDarkThemeState(): void {
 async function syncCurrentUserProfile(): Promise<void> {
   if (!authStore.isLoggedIn) {
     currentUserProfile.value = null;
+    await translatorCollaborationStore.disconnectProjectSession();
     return;
   }
 
@@ -1486,6 +1892,8 @@ async function syncCurrentUserProfile(): Promise<void> {
   } catch {
     currentUserProfile.value = null;
   }
+
+  await syncCurrentPageCollaborationSession();
 }
 
 /**
@@ -1588,7 +1996,7 @@ function handleGlobalKeydown(event: KeyboardEvent): void {
 
   if (event.key === "Delete" && !isShortcutBlocked && selectedUnitID.value) {
     event.preventDefault();
-    requestRemoveUnit(selectedUnitID.value);
+    void requestRemoveUnit(selectedUnitID.value);
     return;
   }
 
@@ -1633,6 +2041,7 @@ onBeforeUnmount(() => {
 
   themeObserver?.disconnect();
   themeObserver = null;
+  void translatorCollaborationStore.disconnectProjectSession();
 });
 </script>
 
@@ -1687,31 +2096,50 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
-.translator-header__page-jump {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 8px;
-  border-radius: 8px;
-  border: 1px solid var(--panel-border, #e5e7eb);
-  background: color-mix(in srgb, var(--surface, #fff) 74%, transparent);
-  color: var(--text-primary, #374151);
+.translator-header__page-select {
+  min-width: 220px;
 }
 
-.translator-header__page-input {
-  width: 36px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: center;
-  outline: none;
-  font: inherit;
+:deep(.translator-header__page-select .ant-select-selector) {
+  height: 28px !important;
+  border-radius: 8px !important;
+  border-color: var(--panel-border, #e5e7eb) !important;
+  background: color-mix(
+    in srgb,
+    var(--surface, #fff) 74%,
+    transparent
+  ) !important;
+  box-shadow: none !important;
+}
+
+:deep(.translator-header__page-select .ant-select-selection-item),
+:deep(.translator-header__page-select .ant-select-selection-placeholder) {
+  line-height: 26px !important;
+  font-size: 13px;
 }
 
 .translator-header__page-total {
   color: var(--text-muted, #6b7280);
   font-size: 13px;
   font-weight: 500;
+}
+
+.translator-header__page-status {
+  max-width: 240px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.12);
+  color: #166534;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.translator-header__page-status.is-readonly {
+  background: rgba(251, 146, 60, 0.14);
+  color: #c2410c;
 }
 
 /* ── 主体 ── */
@@ -2133,6 +2561,7 @@ onBeforeUnmount(() => {
 }
 
 .translator-unit-card__type-toggle {
+  border: none;
   font-size: 10px;
   font-weight: 600;
   padding: 1px 6px;
@@ -2140,6 +2569,11 @@ onBeforeUnmount(() => {
   cursor: pointer;
   user-select: none;
   line-height: 1.3;
+}
+
+.translator-unit-card__type-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .translator-unit-card__type-toggle.is-inbox {
@@ -2328,6 +2762,11 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+.translator-unit-card__textarea.is-readonly {
+  color: var(--text-muted, #6b7280);
+  cursor: not-allowed;
+}
+
 .translator-unit-card__textarea::placeholder {
   color: var(--text-muted, #9ca3af);
   font-weight: 400;
@@ -2355,6 +2794,11 @@ onBeforeUnmount(() => {
 .translator-unit-card__field-btn:hover {
   background: color-mix(in srgb, var(--panel-border, #e5e7eb) 60%, transparent);
   color: var(--text-primary, #374151);
+}
+
+.translator-unit-card__field-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 /* 快捷符号 */
@@ -2397,6 +2841,11 @@ onBeforeUnmount(() => {
 .translator-unit-card__symbol-btn:active {
   background: var(--text-muted, #6b7280);
   color: #fff;
+}
+
+.translator-unit-card__symbol-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 /* 右侧操作列 */
@@ -2452,6 +2901,11 @@ onBeforeUnmount(() => {
   background: #22c55e;
 }
 
+.translator-unit-card__side-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .translator-unit-card__check-badge {
   width: 22px;
   height: 22px;
@@ -2494,6 +2948,11 @@ onBeforeUnmount(() => {
   border-right: 1px solid var(--panel-border, #e5e7eb);
 }
 
+.translator-footer__info-item.is-highlight {
+  color: #c2410c;
+  font-weight: 600;
+}
+
 .translator-footer__info-item:first-child {
   border-left: 1px solid var(--panel-border, #e5e7eb);
 }
@@ -2511,6 +2970,10 @@ onBeforeUnmount(() => {
 .translator-footer__hint {
   color: var(--text-muted, #6b7280);
   font-size: 12px;
+}
+
+.translator-footer__hint.is-readonly {
+  color: #c2410c;
 }
 
 .translator-footer__zoom {
@@ -2626,6 +3089,18 @@ onBeforeUnmount(() => {
 
   .translator-unit-card__section-divider {
     background: rgba(100, 116, 139, 0.22);
+  }
+
+  .translator-header__page-status {
+    background: rgba(22, 101, 52, 0.22);
+    color: #86efac;
+  }
+
+  .translator-header__page-status.is-readonly,
+  .translator-footer__info-item.is-highlight,
+  .translator-footer__hint.is-readonly {
+    background: rgba(180, 83, 9, 0.24);
+    color: #fdba74;
   }
 
   /* 侧栏按钮 */
@@ -2769,6 +3244,15 @@ onBeforeUnmount(() => {
   .translator-header__right {
     justify-content: space-between;
     flex-wrap: wrap;
+  }
+
+  .translator-header__page-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .translator-header__page-status {
+    max-width: 100%;
   }
 }
 </style>

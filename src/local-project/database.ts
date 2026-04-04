@@ -89,6 +89,9 @@ export async function loadPageUnits(
         proofread_text: record.proofread_text,
         translator_comment: record.translator_comment,
         proofreader_comment: record.proofreader_comment,
+        revision: record.revision,
+        last_edited_by: record.last_edited_by,
+        last_edited_at: record.last_edited_at,
       }),
     );
 }
