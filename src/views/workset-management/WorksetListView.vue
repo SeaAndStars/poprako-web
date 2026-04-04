@@ -10,10 +10,10 @@
           class="workspace-header__title mm-hero__title"
           style="margin-top: 8px"
         >
-          工作集与漫画管理
+          漫画项目管理
         </h1>
         <p class="workspace-header__subtitle mm-hero__description">
-          在此管理团队的漫画工作集、封面与默认岗位分配。
+          在此管理团队的漫画项目、封面与默认岗位分配。
         </p>
       </div>
 
@@ -39,7 +39,7 @@
             <template #icon>
               <PlusOutlined />
             </template>
-            新建工作集
+            新建漫画项目
           </a-button>
         </div>
       </div>
@@ -48,15 +48,15 @@
     <main class="workspace-content">
       <div v-if="!currentTeamId" class="worksets-empty-state">
         <a-empty
-          description="请先在上方选择一个你参与的团队，即可查看或管理该团队下的漫画工作集。"
+          description="请先在上方选择一个你参与的团队，即可查看或管理该团队下的漫画项目。"
         />
       </div>
       <div v-else-if="worksets.length === 0" class="worksets-empty-state">
         <a-empty
           :description="
             canCreateWorkset
-              ? '当前团队还没有工作集，点击右上角创建第一个。'
-              : '当前团队还没有工作集，需由团队管理员创建。'
+              ? '当前团队还没有漫画项目，点击右上角创建第一个。'
+              : '当前团队还没有漫画项目，需由团队管理员创建。'
           "
         />
       </div>
@@ -75,7 +75,7 @@
             >
               <div class="workset-card__cover-overlay">
                 <span class="workset-card__chapter-count">
-                  {{ workset.comic_count || 0 }} 部漫画
+                  {{ resolveWorksetCoverLabel(workset) }}
                 </span>
               </div>
             </div>
@@ -90,7 +90,7 @@
                 <div
                   class="workset-card__status workset-card__status--description"
                 >
-                  {{ workset.description || "等待添加漫画与章节" }}
+                  {{ workset.description || "等待添加章节" }}
                 </div>
               </div>
             </template>
@@ -209,9 +209,18 @@ function getWorksetCoverStyle(workset: WorksetInfo) {
 
   return {
     backgroundImage:
-      resolvedCoverUrl ||
+      (resolvedCoverUrl ? `url("${resolvedCoverUrl}")` : undefined) ||
       "linear-gradient(160deg, rgba(95, 20, 12, 0.94), rgba(177, 46, 31, 0.88) 55%, rgba(237, 195, 72, 0.72))",
   };
+}
+
+function resolveWorksetCoverLabel(workset: WorksetInfo): string {
+  const comicCount = workset.comic_count ?? 0;
+  if (comicCount > 1) {
+    return `${comicCount} 部历史漫画`;
+  }
+
+  return comicCount === 1 ? "已初始化漫画" : "待初始化";
 }
 
 function goToDetail(worksetID: string) {

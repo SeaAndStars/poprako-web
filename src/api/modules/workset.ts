@@ -3,7 +3,7 @@
  */
 import { httpClient } from "../http";
 import type { IncludeQuery, PaginationQuery } from "../../types/common";
-import type { WorksetInfo } from "../../types/domain";
+import type { WorksetBoardInfo, WorksetInfo } from "../../types/domain";
 
 /**
  * 工作集查询参数，对应 GET /worksets。
@@ -87,6 +87,19 @@ export type GetWorksetByIDQuery = IncludeQuery;
 export type GetWorksetByIDResponse = WorksetInfo;
 
 /**
+ * 获取工作集章节看板查询参数。
+ */
+export interface GetWorksetBoardQuery {
+  /** 当前选中的漫画 ID。 */
+  comic_id?: string;
+}
+
+/**
+ * 获取工作集章节看板响应类型。
+ */
+export type GetWorksetBoardResponse = WorksetBoardInfo;
+
+/**
  * 预留工作集封面请求体。
  */
 export interface ReserveWorksetCoverArgs {
@@ -156,6 +169,21 @@ export async function getWorksetByID(
 ): Promise<GetWorksetByIDResponse> {
   return httpClient.get<GetWorksetByIDResponse>(
     `/worksets/${worksetID}`,
+    query,
+  );
+}
+
+/**
+ * 获取工作集章节看板，对应 GET /worksets/{workset_id}/board。
+ * 请求类型：GetWorksetBoardQuery。
+ * 返回类型：GetWorksetBoardResponse。
+ */
+export async function getWorksetBoard(
+  worksetID: string,
+  query?: GetWorksetBoardQuery,
+): Promise<GetWorksetBoardResponse> {
+  return httpClient.get<GetWorksetBoardResponse>(
+    `/worksets/${worksetID}/board`,
     query,
   );
 }

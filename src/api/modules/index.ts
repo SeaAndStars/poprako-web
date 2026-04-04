@@ -8,6 +8,7 @@ export * from "./comic";
 export * from "./invitation";
 export * from "./member";
 export * from "./page";
+export * from "./role-request";
 export * from "./team";
 export * from "./unit";
 export * from "./workset";

@@ -2,7 +2,7 @@
   <a-modal
     :open="open"
     width="560px"
-    title="新建漫画工作集"
+    title="新建漫画项目"
     ok-text="确认创建"
     cancel-text="取消"
     :confirm-loading="submitting"
@@ -11,18 +11,18 @@
     @cancel="handleCancel"
   >
     <a-alert
-      message="工作集封面与默认岗位"
-      description="创建后会生成一个新的漫画工作集。你可以提前指定默认翻译、嵌字、校对和审稿负责人，也可以留空；如果选择封面，系统会在创建后自动直传。"
+      message="项目封面与默认岗位"
+      description="创建后系统会同步生成同名漫画，你可以直接进入章节管理。默认翻译、嵌字、校对和审稿负责人都可以先留空；如果选择封面，系统会在创建后自动直传。"
       type="info"
       show-icon
       style="margin-bottom: 24px"
     />
 
     <a-form layout="vertical">
-      <a-form-item label="工作集名称" required>
+      <a-form-item label="项目名称" required>
         <a-input
           v-model:value="form.name"
-          placeholder="请输入你要创建的漫画工作集名称"
+          placeholder="请输入你要创建的漫画项目名称"
         />
       </a-form-item>
 
@@ -313,19 +313,19 @@ async function handleSubmit() {
 
     try {
       await uploadCoverIfNeeded(createdWorkset.id);
-      message.success("工作集创建成功！");
+      message.success("漫画项目创建成功！");
     } catch (error: unknown) {
       message.warning(
         error instanceof Error
-          ? `工作集已创建，但封面上传失败：${error.message}`
-          : "工作集已创建，但封面上传失败",
+          ? `漫画项目已创建，但封面上传失败：${error.message}`
+          : "漫画项目已创建，但封面上传失败",
       );
     }
 
     emit("update:open", false);
     emit("created");
   } catch (error: unknown) {
-    message.error(error instanceof Error ? error.message : "创建工作集失败");
+    message.error(error instanceof Error ? error.message : "创建漫画项目失败");
   } finally {
     submitting.value = false;
   }

@@ -95,6 +95,118 @@ export interface WorksetInfo {
 }
 
 /**
+ * 工作集详情页看板中的漫画切换选项。
+ */
+export interface WorksetBoardComicInfo {
+  /** 漫画唯一标识。 */
+  id: string;
+  /** 在工作集中的排序索引。 */
+  index: number;
+  /** 漫画标题。 */
+  title: string;
+  /** 漫画作者。 */
+  author: string;
+  /** 漫画简介。 */
+  description: string;
+  /** 当前漫画的章节数。 */
+  chapter_count: number;
+  /** 最近活跃时间。 */
+  last_active_at: UnixTimestamp;
+}
+
+/**
+ * 工作集看板里的单个岗位槽位信息。
+ */
+export interface WorksetBoardRoleSlotInfo {
+  /** 当前占位成员。 */
+  occupant?: UserInfo;
+  /** 占位时间。 */
+  assigned_at?: UnixTimestamp;
+  /** 当前岗位待审批申请数。 */
+  pending_request_count: number;
+  /** 当前登录用户自己的待审批申请 ID。 */
+  my_pending_request_id?: string;
+}
+
+/**
+ * 工作集看板里的章节行。
+ */
+export interface WorksetBoardChapterInfo {
+  /** 章节唯一标识。 */
+  id: string;
+  /** 所属漫画 ID。 */
+  comic_id: string;
+  /** 章节序号。 */
+  index: number;
+  /** 章节副标题。 */
+  subtitle: string;
+  /** 页面总数。 */
+  page_count: number;
+  /** 总单元数。 */
+  total_unit_count: number;
+  /** 已翻译单元数。 */
+  translated_unit_count: number;
+  /** 已校对单元数。 */
+  proofread_unit_count: number;
+  /** 创建者用户 ID。 */
+  creator_id: string;
+  /** 创建者信息。 */
+  creator?: UserInfo;
+  /** 上传完成时间。 */
+  uploaded_at?: UnixTimestamp;
+  /** 开始翻译时间。 */
+  transalating_at?: UnixTimestamp;
+  /** 翻译完成时间。 */
+  translated_at?: UnixTimestamp;
+  /** 开始校对时间。 */
+  proofreading_at?: UnixTimestamp;
+  /** 校对完成时间。 */
+  proofread_at?: UnixTimestamp;
+  /** 开始嵌字时间。 */
+  typesetting_at?: UnixTimestamp;
+  /** 嵌字完成时间。 */
+  typeset_at?: UnixTimestamp;
+  /** 审稿完成时间。 */
+  reviewed_at?: UnixTimestamp;
+  /** 发布完成时间。 */
+  published_at?: UnixTimestamp;
+  /** 创建时间。 */
+  created_at: UnixTimestamp;
+  /** 更新时间。 */
+  updated_at: UnixTimestamp;
+  /** 当前流程阶段。 */
+  workflow_stage: string;
+  /** 章节进度百分比。 */
+  progress_percent: number;
+  /** 当前章节待审批申请总数。 */
+  pending_request_count: number;
+  /** 当前用户是否可以审批岗位申请。 */
+  can_review_role_requests: boolean;
+  /** 翻译岗位槽位。 */
+  translator: WorksetBoardRoleSlotInfo;
+  /** 校对岗位槽位。 */
+  proofreader: WorksetBoardRoleSlotInfo;
+  /** 嵌字岗位槽位。 */
+  typesetter: WorksetBoardRoleSlotInfo;
+  /** 审稿岗位槽位。 */
+  reviewer: WorksetBoardRoleSlotInfo;
+}
+
+/**
+ * 工作集详情页所需的章节看板数据。
+ */
+export interface WorksetBoardInfo {
+  /** 工作集头部信息。 */
+  workset: WorksetInfo;
+  /** 当前工作集下的漫画切换选项。 */
+  comic_options: WorksetBoardComicInfo[];
+  /** 当前选中的漫画。 */
+  selected_comic?: WorksetBoardComicInfo;
+  /** 当前漫画下的章节看板行。 */
+  chapters: WorksetBoardChapterInfo[];
+}
+
+/**
  * 漫画信息，对应 swagger 的 value.ComicInfo。
  */
 export interface ComicInfo {
@@ -212,6 +324,42 @@ export interface AssignmentInfo {
 
   /** 兼容旧前端字段：role。 */
   role?: string | number;
+}
+
+/**
+ * 岗位申请信息。
+ */
+export interface RoleRequestInfo {
+  /** 申请记录唯一标识。 */
+  id: string;
+  /** 所属章节 ID。 */
+  chapter_id: string;
+  /** 关联章节信息。 */
+  chapter?: ChapterInfo;
+  /** 申请人用户 ID。 */
+  user_id: string;
+  /** 申请人用户信息。 */
+  user?: UserInfo;
+  /** 申请岗位角色位图。 */
+  role: number;
+  /** 当前申请状态。 */
+  status: string;
+  /** 申请归属协作组 ID。 */
+  applied_team_id?: string;
+  /** 申请时间。 */
+  requested_at: UnixTimestamp;
+  /** 审批人用户 ID。 */
+  reviewed_by?: string;
+  /** 审批人用户信息。 */
+  reviewed_by_user?: UserInfo;
+  /** 审批时间。 */
+  reviewed_at?: UnixTimestamp;
+  /** 拒绝理由。 */
+  rejection_reason?: string;
+  /** 创建时间。 */
+  created_at: UnixTimestamp;
+  /** 更新时间。 */
+  updated_at: UnixTimestamp;
 }
 
 /**
