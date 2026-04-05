@@ -66,6 +66,10 @@ export interface WorksetInfo {
   name: string;
   /** 工作集描述信息。 */
   description?: string;
+  /** 工作集作者信息。 */
+  author?: string;
+  /** 工作集状态。 */
+  status?: string;
   /** 工作集封面地址。 */
   cover_url?: string;
   /** 工作集封面是否已上传。 */
@@ -120,6 +124,8 @@ export interface WorksetBoardComicInfo {
 export interface WorksetBoardRoleSlotInfo {
   /** 当前占位成员。 */
   occupant?: UserInfo;
+  /** 当前全部占位成员。翻译岗位允许多人时会返回多个成员。 */
+  occupants?: UserInfo[];
   /** 占位时间。 */
   assigned_at?: UnixTimestamp;
   /** 当前岗位待审批申请数。 */

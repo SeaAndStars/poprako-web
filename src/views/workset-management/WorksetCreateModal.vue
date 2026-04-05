@@ -12,7 +12,7 @@
   >
     <a-alert
       message="项目封面与默认岗位"
-      description="创建后系统会同步生成同名漫画，你可以直接进入章节管理。默认翻译、嵌字、校对和审稿负责人都可以先留空；如果选择封面，系统会在创建后自动直传。"
+      description="创建后系统会同步生成同名漫画，你可以直接进入章节管理。作者、状态和默认翻译、嵌字、校对、审稿负责人都可以先留空；如果选择封面，系统会在创建后自动直传。"
       type="info"
       show-icon
       style="margin-bottom: 24px"
@@ -33,6 +33,28 @@
           placeholder="简单描述一下这个工作集的用途或连载信息..."
         />
       </a-form-item>
+
+      <a-row :gutter="16">
+        <a-col :span="12">
+          <a-form-item label="作者 (可选)">
+            <a-input
+              v-model:value="form.author"
+              placeholder="例如：尾田荣一郎"
+            />
+          </a-form-item>
+        </a-col>
+
+        <a-col :span="12">
+          <a-form-item label="状态 (可选)">
+            <a-select
+              v-model:value="form.status"
+              allow-clear
+              placeholder="选择项目状态"
+              :options="WORKSET_STATUS_OPTIONS"
+            />
+          </a-form-item>
+        </a-col>
+      </a-row>
 
       <a-form-item label="封面 (可选)">
         <a-upload-dragger
@@ -59,16 +81,11 @@
             <a-select
               v-model:value="form.translator_user_id"
               allow-clear
+              show-search
+              option-filter-prop="label"
               placeholder="空缺 (缺省)"
-            >
-              <a-select-option
-                v-for="member in translatorMembers"
-                :key="member.user_id"
-                :value="member.user_id"
-              >
-                {{ member.user?.name || member.user_id }}
-              </a-select-option>
-            </a-select>
+              :options="translatorMemberOptions"
+            />
           </a-form-item>
         </a-col>
 
@@ -77,16 +94,11 @@
             <a-select
               v-model:value="form.proofreader_user_id"
               allow-clear
+              show-search
+              option-filter-prop="label"
               placeholder="空缺 (缺省)"
-            >
-              <a-select-option
-                v-for="member in proofreaderMembers"
-                :key="member.user_id"
-                :value="member.user_id"
-              >
-                {{ member.user?.name || member.user_id }}
-              </a-select-option>
-            </a-select>
+              :options="proofreaderMemberOptions"
+            />
           </a-form-item>
         </a-col>
 
@@ -95,16 +107,11 @@
             <a-select
               v-model:value="form.typesetter_user_id"
               allow-clear
+              show-search
+              option-filter-prop="label"
               placeholder="空缺 (缺省)"
-            >
-              <a-select-option
-                v-for="member in typesetterMembers"
-                :key="member.user_id"
-                :value="member.user_id"
-              >
-                {{ member.user?.name || member.user_id }}
-              </a-select-option>
-            </a-select>
+              :options="typesetterMemberOptions"
+            />
           </a-form-item>
         </a-col>
 
@@ -113,16 +120,11 @@
             <a-select
               v-model:value="form.reviewer_user_id"
               allow-clear
+              show-search
+              option-filter-prop="label"
               placeholder="空缺 (缺省)"
-            >
-              <a-select-option
-                v-for="member in reviewerMembers"
-                :key="member.user_id"
-                :value="member.user_id"
-              >
-                {{ member.user?.name || member.user_id }}
-              </a-select-option>
-            </a-select>
+              :options="reviewerMemberOptions"
+            />
           </a-form-item>
         </a-col>
       </a-row>
@@ -147,6 +149,7 @@ import {
   uploadFileToPresignedPutUrl,
 } from "../../api/objectStorage";
 import type { MemberInfo } from "../../types/domain";
+import { WORKSET_STATUS_OPTIONS } from "./worksetStatus";
 
 interface Props {
   open: boolean;
@@ -156,6 +159,8 @@ interface Props {
 interface WorksetCreateForm {
   name: string;
   description: string;
+  author: string;
+  status?: string;
   translator_user_id?: string;
   proofreader_user_id?: string;
   typesetter_user_id?: string;
@@ -183,6 +188,8 @@ const coverFileList = ref<UploadFile[]>([]);
 const form = reactive<WorksetCreateForm>({
   name: "",
   description: "",
+  author: "",
+  status: undefined,
   translator_user_id: undefined,
   proofreader_user_id: undefined,
   typesetter_user_id: undefined,
@@ -200,6 +207,18 @@ const typesetterMembers = computed(() =>
 );
 const reviewerMembers = computed(() =>
   getMembersByRole("assigned_reviewer_at"),
+);
+const translatorMemberOptions = computed(() =>
+  buildMemberOptions(translatorMembers.value),
+);
+const proofreaderMemberOptions = computed(() =>
+  buildMemberOptions(proofreaderMembers.value),
+);
+const typesetterMemberOptions = computed(() =>
+  buildMemberOptions(typesetterMembers.value),
+);
+const reviewerMemberOptions = computed(() =>
+  buildMemberOptions(reviewerMembers.value),
 );
 
 watch(
@@ -236,9 +255,24 @@ function getMembersByRole(roleKey: RoleKey): MemberInfo[] {
   return teamMembers.value.filter((member) => Boolean(member[roleKey]));
 }
 
+function buildMemberOptionLabel(member: MemberInfo): string {
+  const displayName = member.user?.name?.trim() || member.user_id;
+  const qq = member.user?.qq?.trim();
+  return qq ? `${displayName} · QQ ${qq}` : displayName;
+}
+
+function buildMemberOptions(members: MemberInfo[]) {
+  return members.map((member) => ({
+    label: buildMemberOptionLabel(member),
+    value: member.user_id,
+  }));
+}
+
 function resetForm(): void {
   form.name = "";
   form.description = "";
+  form.author = "";
+  form.status = undefined;
   form.translator_user_id = undefined;
   form.proofreader_user_id = undefined;
   form.typesetter_user_id = undefined;
@@ -305,6 +339,8 @@ async function handleSubmit() {
       team_id: props.teamId,
       name: form.name.trim(),
       description: form.description.trim() || undefined,
+      author: form.author.trim() || undefined,
+      status: form.status,
       translator_user_id: form.translator_user_id,
       proofreader_user_id: form.proofreader_user_id,
       typesetter_user_id: form.typesetter_user_id,

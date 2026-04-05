@@ -163,6 +163,28 @@
   align-items: center;
 }
 
+.mm-hero__team-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 78%, white 22%);
+  background: color-mix(in srgb, var(--panel-bg) 92%, white 8%);
+}
+
+.mm-hero__team-avatar {
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--mm-accent) 72%, var(--panel-bg));
+  color: #ffffff;
+}
+
+.mm-hero__team-name {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .mm-hero__hint {
   color: var(--text-muted);
   font-size: 13px;
@@ -190,6 +212,18 @@
 
 .mm-panel--members {
   flex: 1;
+}
+
+.mm-member-table-extra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.mm-member-search {
+  width: min(320px, 100%);
 }
 
 .mm-panel--danger {

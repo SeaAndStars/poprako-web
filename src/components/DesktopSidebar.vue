@@ -210,11 +210,12 @@
  * 文件用途：桌面端全局侧边栏。
  * 该组件负责视图切换与底部 QQ 风格分组菜单。
  */
-import { computed, nextTick, ref, type Component } from "vue";
+import { computed, nextTick, onMounted, ref, watch, type Component } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   BookOutlined,
   CheckOutlined,
+  ControlOutlined,
   DashboardOutlined,
   FolderOpenOutlined,
   LockOutlined,
@@ -249,6 +250,33 @@ interface RectAnchor {
 }
 
 type SubPanelPlacement = "left" | "right";
+
+const baseSidebarItems: ReadonlyArray<SidebarItem> = [
+  {
+    key: "workspace",
+    label: "个人工作区",
+    icon: DashboardOutlined,
+    to: "/workspace",
+  },
+  {
+    key: "worksets",
+    label: "漫画工作集",
+    icon: FolderOpenOutlined,
+    to: "/worksets",
+  },
+  {
+    key: "member-list",
+    label: "团队管理",
+    icon: TeamOutlined,
+    to: "/member-list",
+  },
+  {
+    key: "special-symbols",
+    label: "特殊符号",
+    icon: StarOutlined,
+    to: "/special-symbols",
+  },
+];
 
 const route = useRoute();
 const router = useRouter();
@@ -288,38 +316,27 @@ const subPanelStyle = computed(() => {
   };
 });
 
-const sidebarItems: ReadonlyArray<SidebarItem> = [
-  {
-    key: "workspace",
-    label: "个人工作区",
-    icon: DashboardOutlined,
-    to: "/workspace",
-  },
-  {
-    key: "worksets",
-    label: "漫画工作集",
-    icon: FolderOpenOutlined,
-    to: "/worksets",
-  },
-  {
-    key: "comic-playground",
-    label: "漫画广场",
-    icon: BookOutlined,
-    to: "/comic-playground",
-  },
-  {
-    key: "member-list",
-    label: "团队管理",
-    icon: TeamOutlined,
-    to: "/member-list",
-  },
-  {
-    key: "special-symbols",
-    label: "特殊符号",
-    icon: StarOutlined,
-    to: "/special-symbols",
-  },
-];
+const sidebarItems = computed<ReadonlyArray<SidebarItem>>(() => {
+  const nextSidebarItems = [...baseSidebarItems];
+
+  if (authStore.isSuperAdmin) {
+    nextSidebarItems.splice(2, 0, {
+      key: "comic-playground",
+      label: "漫画广场",
+      icon: BookOutlined,
+      to: "/comic-playground",
+    });
+
+    nextSidebarItems.splice(4, 0, {
+      key: "super-admin",
+      label: "超级管理员",
+      icon: ControlOutlined,
+      to: "/super-admin",
+    });
+  }
+
+  return nextSidebarItems;
+});
 
 /**
  * 根据当前路由返回侧栏选中项。
@@ -335,6 +352,10 @@ const activeSidebarKey = computed(() => {
 
   if (route.path === "/member-list") {
     return "member-list";
+  }
+
+  if (route.path === "/super-admin") {
+    return "super-admin";
   }
 
   if (route.path === "/special-symbols") {
@@ -355,7 +376,7 @@ const themeButtonTitle = computed(() => {
  * 执行侧栏页面切换。
  */
 function handleSidebarClick(sidebarKey: string): void {
-  const targetItem = sidebarItems.find(
+  const targetItem = sidebarItems.value.find(
     (sidebarItem) => sidebarItem.key === sidebarKey,
   );
   if (!targetItem) {
@@ -368,6 +389,33 @@ function handleSidebarClick(sidebarKey: string): void {
 
   void router.push(targetItem.to);
 }
+
+async function syncSidebarAccessContext(): Promise<void> {
+  if (!authStore.isLoggedIn) {
+    return;
+  }
+
+  try {
+    await authStore.ensureCurrentUserProfileLoaded();
+  } catch {
+    // 侧栏只依赖超级管理员显隐；失败时保持普通导航即可。
+  }
+}
+
+onMounted(() => {
+  void syncSidebarAccessContext();
+});
+
+watch(
+  () => authStore.isLoggedIn,
+  (isLoggedIn) => {
+    if (!isLoggedIn) {
+      return;
+    }
+
+    void syncSidebarAccessContext();
+  },
+);
 
 /**
  * 控制底部菜单开关，并在关闭时重置二级面板。

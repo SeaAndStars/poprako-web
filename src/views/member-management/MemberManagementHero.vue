@@ -8,7 +8,7 @@
         </span>
         <h1 class="mm-hero__title">团队管理</h1>
         <p class="mm-hero__description">
-          页面只保留核心成员清单；建队、加入团队、邀请码和团队设置全部收纳到独立弹层里。
+          这里聚焦单团队成员、邀请码和团队设置。
         </p>
       </div>
 
@@ -30,16 +30,6 @@
           <div class="mm-hero__action-group">
             <span class="mm-hero__group-label">团队入口</span>
             <div class="mm-hero__action-row">
-              <a-button
-                v-if="currentUser?.is_super_admin"
-                @click="openTeamCreateModal"
-              >
-                <template #icon>
-                  <PlusOutlined />
-                </template>
-                创建团队
-              </a-button>
-
               <a-button @click="openJoinTeamModal">
                 <template #icon>
                   <UsergroupAddOutlined />
@@ -86,9 +76,17 @@
     </div>
 
     <div class="mm-hero__status" aria-live="polite">
-      <a-tag :color="hasSelectedTeam ? 'processing' : 'default'">
-        {{ selectedTeamInfo?.name || "尚未选择团队" }}
-      </a-tag>
+      <div v-if="selectedTeamInfo" class="mm-hero__team-pill">
+        <a-avatar
+          class="mm-hero__team-avatar"
+          :src="resolveTeamAvatarUrl(selectedTeamInfo)"
+        >
+          {{ selectedTeamInfo.name.slice(0, 1).toUpperCase() }}
+        </a-avatar>
+        <span class="mm-hero__team-name">{{ selectedTeamInfo.name }}</span>
+      </div>
+
+      <a-tag v-else color="default">尚未选择团队</a-tag>
 
       <a-tag
         v-if="hasSelectedTeam"
@@ -107,7 +105,6 @@
 <script setup lang="ts">
 import {
   LinkOutlined,
-  PlusOutlined,
   ReloadOutlined,
   SettingOutlined,
   TeamOutlined,
@@ -118,7 +115,6 @@ import { computed } from "vue";
 import { useMemberManagementContext } from "./useMemberManagement";
 
 const {
-  currentUser,
   teamsLoading,
   teams,
   selectedTeamID,
@@ -127,9 +123,9 @@ const {
   hasSelectedTeam,
   canAccessAdminArea,
   selectedTeamInfo,
+  resolveTeamAvatarUrl,
   handleTeamChange,
   handleRefreshClick,
-  openTeamCreateModal,
   openJoinTeamModal,
   openInvitationCenterModal,
   openTeamSettingsModal,
@@ -138,17 +134,17 @@ const {
 
 const heroHintText = computed(() => {
   if (teams.value.length === 0) {
-    return "你还没有团队，可以先创建团队或通过邀请码加入。";
+    return "你还没有团队，可以先通过邀请码加入。";
   }
 
   if (!hasSelectedTeam.value) {
-    return "先选择一个团队，再查看成员或打开对应团队工具。";
+    return "先选择一个团队，再查看成员、邀请码或打开对应团队工具。";
   }
 
   if (canAccessAdminArea.value) {
-    return "你当前拥有管理员权限，邀请码中心和团队设置会通过独立弹层打开，主页面保持成员管理为主。";
+    return "你当前拥有该团队的管理员权限，可以继续处理团队内成员、邀请码与设置。";
   }
 
-  return "当前团队仅展示成员清单；邀请码和团队级操作仍只对管理员开放。";
+  return "当前团队仅展示成员清单。";
 });
 </script>

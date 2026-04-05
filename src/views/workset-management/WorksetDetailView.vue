@@ -56,22 +56,153 @@
 
           <a-descriptions size="small" :column="3">
             <a-descriptions-item label="默认翻译">
-              {{ resolveUserDisplayName(board.workset.translator) }}
+              <span
+                v-if="
+                  board.workset.translator || board.workset.translator_user_id
+                "
+                class="workset-assignee"
+              >
+                <a-avatar
+                  :size="22"
+                  :src="resolveUserAvatarUrl(board.workset.translator)"
+                >
+                  {{
+                    resolveUserDisplayName(
+                      board.workset.translator,
+                      board.workset.translator_user_id,
+                    ).slice(0, 1)
+                  }}
+                </a-avatar>
+                <span class="workset-assignee__name">
+                  {{
+                    resolveUserDisplayName(
+                      board.workset.translator,
+                      board.workset.translator_user_id,
+                    )
+                  }}
+                </span>
+              </span>
+              <span v-else>无指派</span>
             </a-descriptions-item>
             <a-descriptions-item label="默认嵌字">
-              {{ resolveUserDisplayName(board.workset.typesetter) }}
+              <span
+                v-if="
+                  board.workset.typesetter || board.workset.typesetter_user_id
+                "
+                class="workset-assignee"
+              >
+                <a-avatar
+                  :size="22"
+                  :src="resolveUserAvatarUrl(board.workset.typesetter)"
+                >
+                  {{
+                    resolveUserDisplayName(
+                      board.workset.typesetter,
+                      board.workset.typesetter_user_id,
+                    ).slice(0, 1)
+                  }}
+                </a-avatar>
+                <span class="workset-assignee__name">
+                  {{
+                    resolveUserDisplayName(
+                      board.workset.typesetter,
+                      board.workset.typesetter_user_id,
+                    )
+                  }}
+                </span>
+              </span>
+              <span v-else>无指派</span>
             </a-descriptions-item>
             <a-descriptions-item label="默认校对">
-              {{ resolveUserDisplayName(board.workset.proofreader) }}
+              <span
+                v-if="
+                  board.workset.proofreader || board.workset.proofreader_user_id
+                "
+                class="workset-assignee"
+              >
+                <a-avatar
+                  :size="22"
+                  :src="resolveUserAvatarUrl(board.workset.proofreader)"
+                >
+                  {{
+                    resolveUserDisplayName(
+                      board.workset.proofreader,
+                      board.workset.proofreader_user_id,
+                    ).slice(0, 1)
+                  }}
+                </a-avatar>
+                <span class="workset-assignee__name">
+                  {{
+                    resolveUserDisplayName(
+                      board.workset.proofreader,
+                      board.workset.proofreader_user_id,
+                    )
+                  }}
+                </span>
+              </span>
+              <span v-else>无指派</span>
             </a-descriptions-item>
             <a-descriptions-item label="默认审稿">
-              {{ resolveUserDisplayName(board.workset.reviewer) }}
+              <span
+                v-if="board.workset.reviewer || board.workset.reviewer_user_id"
+                class="workset-assignee"
+              >
+                <a-avatar
+                  :size="22"
+                  :src="resolveUserAvatarUrl(board.workset.reviewer)"
+                >
+                  {{
+                    resolveUserDisplayName(
+                      board.workset.reviewer,
+                      board.workset.reviewer_user_id,
+                    ).slice(0, 1)
+                  }}
+                </a-avatar>
+                <span class="workset-assignee__name">
+                  {{
+                    resolveUserDisplayName(
+                      board.workset.reviewer,
+                      board.workset.reviewer_user_id,
+                    )
+                  }}
+                </span>
+              </span>
+              <span v-else>无指派</span>
             </a-descriptions-item>
             <a-descriptions-item label="项目章节数">
               {{ selectedComic?.chapter_count ?? 0 }} 话
             </a-descriptions-item>
+            <a-descriptions-item label="最新一话">
+              <span class="desc-text">
+                {{ latestChapterSummary.text }}
+                <span v-if="latestChapterSummary.hint">
+                  · {{ latestChapterSummary.hint }}
+                </span>
+              </span>
+            </a-descriptions-item>
             <a-descriptions-item label="作者">
-              {{ selectedComic?.author || "未填写" }}
+              {{ board.workset.author || "未填写" }}
+            </a-descriptions-item>
+            <a-descriptions-item label="对外状态">
+              <a-tag
+                :color="
+                  resolveWorksetStatusColor(
+                    worksetExternalStatusText === '未填写'
+                      ? undefined
+                      : worksetExternalStatusText,
+                  )
+                "
+              >
+                {{ worksetExternalStatusText }}
+              </a-tag>
+            </a-descriptions-item>
+            <a-descriptions-item label="内部进度">
+              <span class="desc-text">
+                {{ internalProgressSummary.label }}
+                <span v-if="internalProgressSummary.hint">
+                  · {{ internalProgressSummary.hint }}
+                </span>
+              </span>
             </a-descriptions-item>
             <a-descriptions-item label="所属团队">
               {{ board.workset.team?.name || board.workset.team_id }}
@@ -122,9 +253,19 @@
                 </h2>
                 <div class="comic-focus-panel__meta">
                   <a-tag>{{ selectedComic.chapter_count }} 话</a-tag>
-                  <a-tag v-if="selectedComic.author">
-                    作者 {{ selectedComic.author }}
+                  <a-tag>作者 {{ board.workset.author || "未填写" }}</a-tag>
+                  <a-tag
+                    :color="
+                      resolveWorksetStatusColor(
+                        worksetExternalStatusText === '未填写'
+                          ? undefined
+                          : worksetExternalStatusText,
+                      )
+                    "
+                  >
+                    对外 {{ worksetExternalStatusText }}
                   </a-tag>
+                  <a-tag>内部 {{ internalProgressSummary.label }}</a-tag>
                   <a-tag>
                     最近活跃 {{ formatTimestamp(selectedComic.last_active_at) }}
                   </a-tag>
@@ -178,23 +319,99 @@
                   <div class="chapter-card__header">
                     <div class="chapter-card__title-block">
                       <div class="chapter-card__title-row">
-                        <div>
-                          <h3 class="chapter-card__title">
-                            第{{ displaySequence(chapter.index) }}话
-                            <span class="chapter-card__subtitle">
-                              {{ chapter.subtitle || "未命名章节" }}
-                            </span>
-                          </h3>
-                          <div
-                            v-if="chapter.can_review_role_requests"
-                            class="chapter-card__title-actions"
-                          >
-                            <a-button
-                              size="small"
-                              @click="openChapterNumberEditor(chapter)"
+                        <div class="chapter-card__title-copy">
+                          <div class="chapter-card__title-heading">
+                            <h3 class="chapter-card__title">
+                              第{{ displaySequence(chapter.index) }}话
+                              <span class="chapter-card__subtitle">
+                                {{ chapter.subtitle || "未命名章节" }}
+                              </span>
+                            </h3>
+                            <div
+                              v-if="
+                                chapter.can_review_role_requests ||
+                                canDeleteChapter
+                              "
+                              class="chapter-card__title-actions"
                             >
-                              编辑话数
-                            </a-button>
+                              <a-tooltip
+                                v-if="chapter.can_review_role_requests"
+                                title="编辑章节信息"
+                              >
+                                <a-button
+                                  size="small"
+                                  shape="circle"
+                                  @click="openChapterEditor(chapter)"
+                                >
+                                  <template #icon><EditOutlined /></template>
+                                </a-button>
+                              </a-tooltip>
+                              <a-tooltip
+                                v-if="chapter.can_review_role_requests"
+                                title="审批岗位申请"
+                              >
+                                <a-badge :count="chapter.pending_request_count">
+                                  <a-button
+                                    size="small"
+                                    shape="circle"
+                                    :disabled="
+                                      chapter.pending_request_count === 0
+                                    "
+                                    @click="handleRoleReview({ chapter })"
+                                  >
+                                    <template #icon><AuditOutlined /></template>
+                                  </a-button>
+                                </a-badge>
+                              </a-tooltip>
+                              <a-popconfirm
+                                v-if="canDeleteChapter"
+                                title="删除后该章节及其页面分工会一起移除，确认继续吗？"
+                                ok-text="删除"
+                                cancel-text="取消"
+                                @confirm="handleDeleteChapter(chapter)"
+                              >
+                                <a-tooltip title="删除章节">
+                                  <a-button
+                                    size="small"
+                                    shape="circle"
+                                    danger
+                                    :loading="deletingChapterId === chapter.id"
+                                  >
+                                    <template #icon
+                                      ><DeleteOutlined
+                                    /></template>
+                                  </a-button>
+                                </a-tooltip>
+                              </a-popconfirm>
+                            </div>
+                          </div>
+
+                          <div class="chapter-card__meta">
+                            <span class="chapter-card__creator">
+                              <a-avatar
+                                :size="24"
+                                :src="resolveUserAvatarUrl(chapter.creator)"
+                              >
+                                {{
+                                  resolveUserDisplayName(
+                                    chapter.creator,
+                                    chapter.creator_id,
+                                  ).slice(0, 1)
+                                }}
+                              </a-avatar>
+                              <span>
+                                创建者
+                                {{
+                                  resolveUserDisplayName(
+                                    chapter.creator,
+                                    chapter.creator_id,
+                                  )
+                                }}
+                              </span>
+                            </span>
+                            <span class="chapter-card__timestamp">{{
+                              formatTimestamp(chapter.created_at)
+                            }}</span>
                           </div>
                         </div>
 
@@ -215,19 +432,6 @@
                             待审批 {{ chapter.pending_request_count }}
                           </a-tag>
                         </div>
-                      </div>
-
-                      <div class="chapter-card__meta">
-                        <span>
-                          创建者
-                          {{
-                            resolveUserDisplayName(
-                              chapter.creator,
-                              chapter.creator_id,
-                            )
-                          }}
-                        </span>
-                        <span>{{ formatTimestamp(chapter.created_at) }}</span>
                       </div>
 
                       <div class="chapter-card__stats">
@@ -273,70 +477,69 @@
                       role-label="翻译"
                       :role-value="ROLE_TRANSLATOR"
                       :chapter="chapter"
+                      :current-user-id="currentTeamMember?.user_id"
                       :default-user="board.workset.translator"
                       :current-member-role-mask="currentMemberRoleMask"
                       :applied-team-id="board.workset.team_id"
                       :can-review="chapter.can_review_role_requests"
+                      :can-manage="chapter.can_review_role_requests"
+                      workspace-mode="translate"
                       @changed="handleRoleChanged"
+                      @manage="openRoleManager(chapter, ROLE_TRANSLATOR)"
+                      @workspace="handleRoleWorkspace(chapter, 'translate')"
                     />
                     <RoleStatusItem
                       :role-slot="chapter.typesetter"
                       role-label="嵌字"
                       :role-value="ROLE_TYPESETTER"
                       :chapter="chapter"
+                      :current-user-id="currentTeamMember?.user_id"
                       :default-user="board.workset.typesetter"
                       :current-member-role-mask="currentMemberRoleMask"
                       :applied-team-id="board.workset.team_id"
                       :can-review="chapter.can_review_role_requests"
+                      :can-manage="chapter.can_review_role_requests"
                       @changed="handleRoleChanged"
+                      @manage="openRoleManager(chapter, ROLE_TYPESETTER)"
                     />
                     <RoleStatusItem
                       :role-slot="chapter.proofreader"
                       role-label="校对"
                       :role-value="ROLE_PROOFREADER"
                       :chapter="chapter"
+                      :current-user-id="currentTeamMember?.user_id"
                       :default-user="board.workset.proofreader"
                       :current-member-role-mask="currentMemberRoleMask"
                       :applied-team-id="board.workset.team_id"
                       :can-review="chapter.can_review_role_requests"
+                      :can-manage="chapter.can_review_role_requests"
+                      workspace-mode="proofread"
                       @changed="handleRoleChanged"
+                      @manage="openRoleManager(chapter, ROLE_PROOFREADER)"
+                      @workspace="handleRoleWorkspace(chapter, 'proofread')"
                     />
                     <RoleStatusItem
                       :role-slot="chapter.reviewer"
                       role-label="审稿"
                       :role-value="ROLE_REVIEWER"
                       :chapter="chapter"
+                      :current-user-id="currentTeamMember?.user_id"
                       :default-user="board.workset.reviewer"
                       :current-member-role-mask="currentMemberRoleMask"
                       :applied-team-id="board.workset.team_id"
                       :can-review="chapter.can_review_role_requests"
+                      :can-manage="chapter.can_review_role_requests"
                       @changed="handleRoleChanged"
+                      @manage="openRoleManager(chapter, ROLE_REVIEWER)"
                     />
                   </div>
 
                   <div class="chapter-card__footer">
                     <div
-                      v-if="
-                        chapter.can_review_role_requests ||
-                        canBatchApplyRoles(chapter)
-                      "
+                      v-if="canBatchApplyRoles(chapter)"
                       class="chapter-card__footer-actions"
                     >
                       <a-button
-                        v-if="chapter.can_review_role_requests"
-                        size="small"
-                        type="primary"
-                        ghost
-                        :disabled="chapter.pending_request_count === 0"
-                        @click="handleRoleReview({ chapter })"
-                      >
-                        审批申请
-                        <template v-if="chapter.pending_request_count > 0">
-                          {{ chapter.pending_request_count }}
-                        </template>
-                      </a-button>
-                      <a-button
-                        v-if="canBatchApplyRoles(chapter)"
                         size="small"
                         :loading="batchApplyingChapterId === chapter.id"
                         @click="handleBatchApplyRoles(chapter)"
@@ -363,6 +566,7 @@
         :comic-id="selectedComic?.id"
         :comic-title="currentProjectTitle"
         :chapter-count="selectedComic?.chapter_count"
+        :default-role-summaries="chapterDefaultRoleSummaries"
         :next-chapter-number="nextChapterNumber"
         :used-chapter-numbers="usedChapterNumbers"
         @created="handleChapterCreated"
@@ -459,12 +663,12 @@
 
       <a-modal
         :open="Boolean(currentEditableChapter)"
-        title="编辑章节话数"
+        title="编辑章节信息"
         ok-text="保存"
         cancel-text="取消"
-        :confirm-loading="updatingChapterNumber"
-        @ok="submitChapterNumberUpdate"
-        @cancel="closeChapterNumberEditor"
+        :confirm-loading="updatingChapter"
+        @ok="submitChapterUpdate"
+        @cancel="closeChapterEditor"
       >
         <a-form layout="vertical">
           <a-form-item label="当前章节">
@@ -485,6 +689,154 @@
               style="width: 100%"
             />
           </a-form-item>
+          <a-form-item label="章节副标题">
+            <a-input
+              v-model:value="editingChapterSubtitle"
+              placeholder="例如：雨夜突入 / 第一次联调"
+              allow-clear
+            />
+          </a-form-item>
+        </a-form>
+      </a-modal>
+
+      <a-modal
+        :open="Boolean(currentManagedRoleChapter && currentManagedRoleSlot)"
+        :title="
+          currentManagedRoleChapter
+            ? `管理第${displaySequence(currentManagedRoleChapter.index)}话 · ${currentManagedRoleLabel}`
+            : '管理章节岗位'
+        "
+        :ok-text="roleManagerOkText"
+        cancel-text="取消"
+        :confirm-loading="managingRoleSubmitting"
+        :ok-button-props="{ disabled: !canSubmitRoleManagement }"
+        @ok="submitRoleManagement"
+        @cancel="closeRoleManager"
+      >
+        <a-form layout="vertical">
+          <a-form-item
+            v-if="!currentManagedRoleAllowsMultiple"
+            label="当前负责人"
+          >
+            <div class="role-manager__current">
+              <a-avatar
+                :src="resolveUserAvatarUrl(currentManagedRoleSlot?.occupant)"
+              >
+                {{
+                  resolveUserDisplayName(
+                    currentManagedRoleSlot?.occupant,
+                  ).slice(0, 1)
+                }}
+              </a-avatar>
+              <div class="role-manager__current-copy">
+                <div class="role-manager__current-name">
+                  {{ resolveUserDisplayName(currentManagedRoleSlot?.occupant) }}
+                </div>
+                <div class="role-manager__current-meta">
+                  {{
+                    currentManagedRoleSlot?.assigned_at
+                      ? `指派于 ${formatTimestamp(currentManagedRoleSlot.assigned_at)}`
+                      : "当前岗位空缺"
+                  }}
+                </div>
+              </div>
+            </div>
+          </a-form-item>
+
+          <a-form-item v-else :label="`当前${currentManagedRoleLabel}`">
+            <a-spin
+              :spinning="loadingManagedRoleAssignments"
+              tip="正在加载当前分工..."
+            >
+              <div class="role-manager__occupants">
+                <div
+                  v-if="currentManagedRoleOccupants.length === 0"
+                  class="role-manager__empty"
+                >
+                  当前还没有{{ currentManagedRoleLabel }}负责人。
+                </div>
+
+                <div
+                  v-for="occupant in currentManagedRoleOccupants"
+                  :key="occupant.id"
+                  class="role-manager__occupant-row"
+                >
+                  <div
+                    class="role-manager__current role-manager__current--multi"
+                  >
+                    <a-avatar :src="resolveUserAvatarUrl(occupant)">
+                      {{
+                        resolveUserDisplayName(occupant, occupant.id).slice(
+                          0,
+                          1,
+                        )
+                      }}
+                    </a-avatar>
+                    <div class="role-manager__current-copy">
+                      <div class="role-manager__current-name">
+                        {{ resolveUserDisplayName(occupant, occupant.id) }}
+                      </div>
+                      <div class="role-manager__current-meta">
+                        支持多人翻译，可单独移除当前成员
+                      </div>
+                    </div>
+                  </div>
+
+                  <a-button
+                    size="small"
+                    danger
+                    ghost
+                    :loading="removingManagedRoleUserId === occupant.id"
+                    @click="removeManagedTranslator(occupant.id)"
+                  >
+                    移除
+                  </a-button>
+                </div>
+              </div>
+            </a-spin>
+          </a-form-item>
+
+          <a-form-item
+            :label="
+              currentManagedRoleAllowsMultiple
+                ? `添加${currentManagedRoleLabel}负责人`
+                : `新的${currentManagedRoleLabel}负责人`
+            "
+          >
+            <a-select
+              v-model:value="managingRoleUserId"
+              show-search
+              allow-clear
+              option-filter-prop="label"
+              :options="manageableRoleMemberOptions"
+              :loading="loadingTeamMembers"
+              :placeholder="
+                currentManagedRoleAllowsMultiple
+                  ? `从当前团队成员里继续添加${currentManagedRoleLabel}`
+                  : `从当前团队成员里选择${currentManagedRoleLabel}负责人`
+              "
+            />
+          </a-form-item>
+
+          <div class="role-manager__toolbar">
+            <a-button
+              v-if="currentManagedRoleSlot?.pending_request_count"
+              @click="openManagedRoleReview"
+            >
+              查看待审批申请 {{ currentManagedRoleSlot.pending_request_count }}
+            </a-button>
+            <a-button
+              v-if="
+                !currentManagedRoleAllowsMultiple &&
+                currentManagedRoleSlot?.occupant?.id
+              "
+              danger
+              ghost
+              @click="clearManagedRoleSelection"
+            >
+              清空负责人
+            </a-button>
+          </div>
         </a-form>
       </a-modal>
     </template>
@@ -498,7 +850,9 @@
 <script setup lang="ts">
 import { h } from "vue";
 import {
+  AuditOutlined,
   ArrowLeftOutlined,
+  DeleteOutlined,
   EditOutlined,
   PlusOutlined,
 } from "@ant-design/icons-vue";
@@ -506,6 +860,7 @@ import {
 import ChapterCreateModal from "./ChapterCreateModal.vue";
 import RoleStatusItem from "./RoleStatusItem.vue";
 import WorksetEditModal from "./WorksetEditModal.vue";
+import { resolveWorksetStatusColor } from "./worksetStatus";
 import { useWorksetDetailView } from "./useWorksetDetailView";
 
 const {
@@ -513,30 +868,56 @@ const {
   board,
   canCreateChapter,
   canBatchApplyRoles,
-  closeChapterNumberEditor,
+  canDeleteChapter,
+  canSubmitRoleManagement,
+  chapterDefaultRoleSummaries,
+  clearManagedRoleSelection,
+  closeChapterEditor,
+  closeRoleManager,
   comicOptions,
   currentEditableChapter,
+  currentManagedRoleChapter,
+  currentManagedRoleAllowsMultiple,
+  currentManagedRoleLabel,
+  currentManagedRoleOccupants,
+  currentManagedRoleSlot,
   currentProjectDescription,
   currentMemberRoleMask,
+  currentTeamMember,
   currentProjectTitle,
   currentReviewChapter,
   displaySequence,
   editingChapterNumber,
+  editingChapterSubtitle,
   formatTimestamp,
   handleBack,
   handleBatchApplyRoles,
   handleChapterCreated,
   handleComicChange,
-  openChapterNumberEditor,
+  handleDeleteChapter,
+  handleRoleWorkspace,
   handleReviewDrawerClose,
   handleWorksetUpdated,
   handleRoleChanged,
   handleRoleRequestReview,
   handleRoleReview,
   headerSubtitle,
+  internalProgressSummary,
+  latestChapterSummary,
+  loadingManagedRoleAssignments,
   loadingBoard,
+  loadingTeamMembers,
+  manageableRoleMemberOptions,
+  managingRoleSubmitting,
+  managingRoleUserId,
+  roleManagerOkText,
   nextChapterNumber,
+  openChapterEditor,
+  openManagedRoleReview,
+  openRoleManager,
   refreshBoard,
+  removeManagedTranslator,
+  removingManagedRoleUserId,
   resolveBatchApplyLabel,
   resolveRoleLabel,
   resolveUserAvatarUrl,
@@ -555,11 +936,14 @@ const {
   selectedComicStats,
   showChapterModal,
   showWorksetEditModal,
-  submitChapterNumberUpdate,
+  submitChapterUpdate,
+  submitRoleManagement,
   summaryCards,
-  updatingChapterNumber,
+  deletingChapterId,
+  updatingChapter,
   usedChapterNumbers,
   worksetCoverUrl,
+  worksetExternalStatusText,
 } = useWorksetDetailView();
 </script>
 

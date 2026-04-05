@@ -38,6 +38,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import("../views/TranslatorView.vue"),
   },
   {
+    path: "/online-translator/:chapterId",
+    name: "online-translator",
+    component: () => import("../views/TranslatorView.vue"),
+  },
+  {
     path: "/worksets",
     name: "workset-list",
     component: () => import("../views/workset-management/WorksetListView.vue"),
@@ -56,11 +61,22 @@ const routes: RouteRecordRaw[] = [
     path: "/comic-playground",
     name: "comic-playground",
     component: () => import("../views/ComicPlaygroundView.vue"),
+    meta: {
+      requiresSuperAdmin: true,
+    },
   },
   {
     path: "/member-list",
     name: "member-list",
     component: () => import("../views/MemberListView.vue"),
+  },
+  {
+    path: "/super-admin",
+    name: "super-admin",
+    component: () => import("../views/SuperAdminView.vue"),
+    meta: {
+      requiresSuperAdmin: true,
+    },
   },
   {
     path: "/special-symbols",
@@ -104,7 +120,7 @@ function isDevelopmentPreviewModeEnabled(): boolean {
 /**
  * 路由前置守卫，用于校验登录态。
  */
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore();
   const developmentPreviewModeEnabled = isDevelopmentPreviewModeEnabled();
   const isAuthRoute = to.path === "/login" || to.path === "/register";
@@ -115,6 +131,27 @@ router.beforeEach((to) => {
 
   if (isAuthRoute && authStore.isLoggedIn) {
     return "/workspace";
+  }
+
+  if (to.meta.requiresSuperAdmin) {
+    if (!authStore.isLoggedIn || developmentPreviewModeEnabled) {
+      return "/workspace";
+    }
+
+    try {
+      await authStore.ensureCurrentUserProfileLoaded();
+    } catch {
+      if (!localStorage.getItem("access_token")) {
+        authStore.clearAccessToken();
+        return "/login";
+      }
+
+      return "/workspace";
+    }
+
+    if (!authStore.isSuperAdmin) {
+      return "/workspace";
+    }
   }
 
   return true;

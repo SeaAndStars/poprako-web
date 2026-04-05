@@ -11,6 +11,8 @@ import type { WorksetBoardInfo, WorksetInfo } from "../../types/domain";
 export interface WorksetListQuery extends PaginationQuery, IncludeQuery {
   /** 所属团队 ID。 */
   team_id: string;
+  /** 模糊搜索关键字。 */
+  search?: string;
 }
 
 /**
@@ -28,6 +30,10 @@ export interface CreateWorksetArgs {
   name: string;
   /** 工作集描述。 */
   description?: string;
+  /** 工作集作者信息。 */
+  author?: string;
+  /** 工作集状态。 */
+  status?: string;
   /** 默认翻译用户 ID。 */
   translator_user_id?: string;
   /** 默认校对用户 ID。 */
@@ -66,6 +72,10 @@ export interface UpdateWorksetArgs {
   name: string;
   /** 工作集描述。 */
   description?: string;
+  /** 工作集作者信息。 */
+  author?: string;
+  /** 工作集状态。 */
+  status?: string;
   /** 默认翻译用户 ID。 */
   translator_user_id?: string;
   /** 默认校对用户 ID。 */

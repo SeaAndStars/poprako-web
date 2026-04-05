@@ -69,9 +69,29 @@ export interface UpdateAssignmentArgs {
 }
 
 /**
+ * 原子管理章节单个岗位负责人的参数。
+ */
+export interface ManageChapterRoleAssignmentArgs {
+  /** 所属章节 ID。 */
+  chapter_id: string;
+  /** 目标岗位位图。 */
+  role: number;
+  /** 新负责人用户 ID；为空时表示清空负责人。 */
+  user_id?: string;
+  /** 新负责人所属协作组 ID。 */
+  assigned_team_id?: string;
+}
+
+/**
  * 更新分配请求类型。
  */
 export type UpdateAssignmentRequest = UpdateAssignmentArgs;
+
+/**
+ * 原子管理章节岗位请求类型。
+ */
+export type ManageChapterRoleAssignmentRequest =
+  ManageChapterRoleAssignmentArgs;
 
 /**
  * 获取分配列表响应类型。
@@ -87,6 +107,11 @@ export type GetMyAssignmentsResponse = AssignmentInfo[];
  * 创建分配响应类型。
  */
 export type UpdateAssignmentResponse = void;
+
+/**
+ * 原子管理章节岗位响应类型。
+ */
+export type ManageChapterRoleAssignmentResponse = void;
 
 /**
  * 删除分配响应类型。
@@ -153,6 +178,20 @@ export async function updateAssignment(
     `/assignments/${assignmentID}`,
     updateAssignmentArgs,
   );
+}
+
+/**
+ * 原子指定、改派或清空章节单个岗位负责人，对应 PUT /assignments/chapter-role。
+ * 请求类型：ManageChapterRoleAssignmentRequest。
+ * 返回类型：ManageChapterRoleAssignmentResponse。
+ */
+export async function manageChapterRoleAssignment(
+  manageChapterRoleAssignmentArgs: ManageChapterRoleAssignmentRequest,
+): Promise<ManageChapterRoleAssignmentResponse> {
+  await httpClient.put<
+    ManageChapterRoleAssignmentResponse,
+    ManageChapterRoleAssignmentRequest
+  >("/assignments/chapter-role", manageChapterRoleAssignmentArgs);
 }
 
 /**

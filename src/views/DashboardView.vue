@@ -4,7 +4,7 @@
       <div class="workspace-header__left">
         <span class="workspace-header__title">翻校工作区</span>
         <span class="workspace-header__subtitle">
-          Local Project Workspace
+          Local Project &amp; Online Chapter Workspace
         </span>
       </div>
 
@@ -27,12 +27,12 @@
         <a-input
           v-model:value="searchKeyword"
           class="workspace-toolbar__search"
-          placeholder="搜索项目标题或作者"
+          placeholder="搜索本地项目、漫画标题或章节"
           allow-clear
         />
 
         <span class="workspace-toolbar__hint">
-          {{ filteredProjects.length }} / {{ projects.length }} 个项目
+          {{ toolbarHint }}
         </span>
       </section>
 
@@ -53,31 +53,205 @@
         </a-col>
       </a-row>
 
-      <section
-        v-if="filteredProjects.length > 0"
-        class="workspace-project-grid"
-      >
-        <div
-          v-for="projectRecord in filteredProjects"
-          :key="projectRecord.id"
-          class="workspace-project-grid__item"
-        >
-          <LocalProjectCard
-            :project="projectRecord"
-            :active="activeProject?.id === projectRecord.id"
-            @open="handleOpenProject"
-            @delete="handleDeleteProject"
-          />
+      <section class="workspace-section">
+        <div class="workspace-section__header">
+          <div>
+            <h2 class="workspace-section__title">在线参与章节</h2>
+            <p class="workspace-section__description">
+              你当前负责的翻译或校对章节会显示在这里，点击即可进入对应在线房间。
+            </p>
+          </div>
+          <span class="workspace-section__count">
+            {{ filteredOnlineParticipations.length }} /
+            {{ onlineParticipations.length }} 话
+          </span>
         </div>
+
+        <a-spin :spinning="onlineAssignmentsLoading">
+          <div
+            v-if="filteredOnlineParticipations.length > 0"
+            class="workspace-online-grid"
+          >
+            <a-card
+              v-for="chapterEntry in filteredOnlineParticipations"
+              :key="chapterEntry.chapterId"
+              class="workspace-online-card"
+              :bordered="false"
+            >
+              <div class="workspace-online-card__head">
+                <div class="workspace-online-card__identity">
+                  <span class="workspace-online-card__title">
+                    {{ chapterEntry.comicTitle }}
+                  </span>
+                  <span class="workspace-online-card__chapter">
+                    {{ chapterEntry.chapterLabel }}
+                  </span>
+                  <p
+                    v-if="chapterEntry.chapterSubtitle"
+                    class="workspace-online-card__subtitle"
+                  >
+                    {{ chapterEntry.chapterSubtitle }}
+                  </p>
+                  <p class="workspace-online-card__author">
+                    {{ chapterEntry.comicAuthor || "作者未填写" }}
+                  </p>
+                </div>
+                <span class="workspace-online-card__timestamp">
+                  {{ formatParticipationTimestamp(chapterEntry.lastActiveAt) }}
+                </span>
+              </div>
+
+              <div class="workspace-online-card__roles">
+                <a-tag
+                  v-for="role in chapterEntry.roles"
+                  :key="role.mode"
+                  :color="role.mode === 'translate' ? 'gold' : 'green'"
+                >
+                  {{ role.label }}
+                </a-tag>
+              </div>
+
+              <div class="workspace-online-card__stats">
+                <div class="workspace-online-card__stat">
+                  <span class="workspace-online-card__stat-value">
+                    {{ chapterEntry.pageCount }}
+                  </span>
+                  <span class="workspace-online-card__stat-label">页数</span>
+                </div>
+                <div class="workspace-online-card__stat">
+                  <span class="workspace-online-card__stat-value">
+                    {{ chapterEntry.totalUnitCount }}
+                  </span>
+                  <span class="workspace-online-card__stat-label">标记</span>
+                </div>
+                <div class="workspace-online-card__stat">
+                  <span class="workspace-online-card__stat-value">
+                    {{ chapterEntry.translatedUnitCount }}
+                  </span>
+                  <span class="workspace-online-card__stat-label">已翻</span>
+                </div>
+                <div class="workspace-online-card__stat">
+                  <span class="workspace-online-card__stat-value">
+                    {{ chapterEntry.proofreadUnitCount }}
+                  </span>
+                  <span class="workspace-online-card__stat-label">已校</span>
+                </div>
+              </div>
+
+              <div class="workspace-online-card__progress-grid">
+                <div class="workspace-online-card__progress-block is-translate">
+                  <div class="workspace-online-card__progress-head">
+                    <span>翻译进度</span>
+                    <strong
+                      >{{ chapterEntry.translatedProgressPercent }}%</strong
+                    >
+                  </div>
+                  <a-progress
+                    :percent="chapterEntry.translatedProgressPercent"
+                    :show-info="false"
+                    stroke-color="#d97706"
+                  />
+                  <div class="workspace-online-card__progress-foot">
+                    <span>
+                      {{ chapterEntry.translatedUnitCount }} /
+                      {{ chapterEntry.totalUnitCount }}
+                    </span>
+                    <span
+                      >待翻 {{ chapterEntry.pendingTranslateUnitCount }}</span
+                    >
+                  </div>
+                </div>
+
+                <div class="workspace-online-card__progress-block is-proofread">
+                  <div class="workspace-online-card__progress-head">
+                    <span>校对进度</span>
+                    <strong
+                      >{{ chapterEntry.proofreadProgressPercent }}%</strong
+                    >
+                  </div>
+                  <a-progress
+                    :percent="chapterEntry.proofreadProgressPercent"
+                    :show-info="false"
+                    stroke-color="#16a34a"
+                  />
+                  <div class="workspace-online-card__progress-foot">
+                    <span>
+                      {{ chapterEntry.proofreadUnitCount }} /
+                      {{ chapterEntry.totalUnitCount }}
+                    </span>
+                    <span>
+                      待校 {{ chapterEntry.pendingProofreadUnitCount }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="workspace-online-card__actions">
+                <a-button
+                  v-for="role in chapterEntry.roles"
+                  :key="`${chapterEntry.chapterId}-${role.mode}`"
+                  size="small"
+                  :type="role.mode === 'translate' ? 'primary' : 'default'"
+                  @click="handleOpenOnlineChapter(chapterEntry, role.mode)"
+                >
+                  进入{{ role.label }}
+                </a-button>
+              </div>
+            </a-card>
+          </div>
+
+          <div v-else class="workspace-inline-empty">
+            <a-empty :description="onlineParticipationEmptyText">
+              <a-button
+                v-if="onlineAssignmentsErrorMessage"
+                @click="loadMyOnlineAssignments"
+              >
+                重新加载
+              </a-button>
+            </a-empty>
+          </div>
+        </a-spin>
       </section>
 
-      <div v-else class="workspace-empty-state">
-        <a-empty description="当前还没有本地翻校项目">
-          <a-button type="primary" @click="createModalOpen = true">
-            立即新建项目
-          </a-button>
-        </a-empty>
-      </div>
+      <section class="workspace-section">
+        <div class="workspace-section__header">
+          <div>
+            <h2 class="workspace-section__title">本地项目</h2>
+            <p class="workspace-section__description">
+              已缓存到当前浏览器的离线翻校项目会保留在这里。
+            </p>
+          </div>
+          <span class="workspace-section__count">
+            {{ filteredProjects.length }} / {{ projects.length }} 个项目
+          </span>
+        </div>
+
+        <section
+          v-if="filteredProjects.length > 0"
+          class="workspace-project-grid"
+        >
+          <div
+            v-for="projectRecord in filteredProjects"
+            :key="projectRecord.id"
+            class="workspace-project-grid__item"
+          >
+            <LocalProjectCard
+              :project="projectRecord"
+              :active="activeProject?.id === projectRecord.id"
+              @open="handleOpenProject"
+              @delete="handleDeleteProject"
+            />
+          </div>
+        </section>
+
+        <div v-else class="workspace-empty-state">
+          <a-empty :description="localProjectEmptyText">
+            <a-button type="primary" @click="createModalOpen = true">
+              立即新建项目
+            </a-button>
+          </a-empty>
+        </div>
+      </section>
     </main>
 
     <LocalProjectCreateModal
@@ -89,264 +263,30 @@
 </template>
 
 <script setup lang="ts">
-/**
- * 文件用途：作为本地翻校项目工作区首页。
- * 页面负责展示项目列表、搜索过滤和新建项目入口，是翻译器的外层工作台。
- */
-import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
-import { Modal, message } from "ant-design-vue";
-import { storeToRefs } from "pinia";
 import LocalProjectCard from "../components/local-project/LocalProjectCard.vue";
 import LocalProjectCreateModal from "../components/local-project/LocalProjectCreateModal.vue";
-import { useLocalProjectsStore } from "../stores/localProjects";
+import { useDashboardView } from "./useDashboardView";
 
-const router = useRouter();
-const localProjectsStore = useLocalProjectsStore();
-const { projects, activeProject } = storeToRefs(localProjectsStore);
-
-const createModalOpen = ref(false);
-const searchKeyword = ref("");
-
-/**
- * 根据标题与作者筛选项目。
- */
-const filteredProjects = computed(() => {
-  const normalizedKeyword = searchKeyword.value.trim().toLowerCase();
-
-  if (!normalizedKeyword) {
-    return projects.value;
-  }
-
-  return projects.value.filter((projectRecord) => {
-    return (
-      projectRecord.title.toLowerCase().includes(normalizedKeyword) ||
-      projectRecord.author.toLowerCase().includes(normalizedKeyword)
-    );
-  });
-});
-
-/**
- * 首页摘要卡片。
- */
-const summaryCards = computed(() => {
-  const pageCount = projects.value.reduce((totalCount, projectRecord) => {
-    return totalCount + projectRecord.page_count;
-  }, 0);
-
-  const unitCount = projects.value.reduce((totalCount, projectRecord) => {
-    return totalCount + projectRecord.unit_count;
-  }, 0);
-
-  const translatedCount = projects.value.reduce((totalCount, projectRecord) => {
-    return totalCount + projectRecord.translated_unit_count;
-  }, 0);
-
-  const proofreadCount = projects.value.reduce((totalCount, projectRecord) => {
-    return totalCount + projectRecord.proofread_unit_count;
-  }, 0);
-
-  return [
-    {
-      label: "项目总数",
-      value: projects.value.length,
-    },
-    {
-      label: "总页数",
-      value: pageCount,
-    },
-    {
-      label: "总标记数",
-      value: unitCount,
-    },
-    {
-      label: "已校对 / 已翻译",
-      value: `${proofreadCount}/${translatedCount}`,
-    },
-  ];
-});
-
-/**
- * 进入翻译器。
- */
-function handleOpenProject(projectID: string): void {
-  localProjectsStore.setActiveProject(projectID);
-  void router.push(`/translator/${projectID}`);
-}
-
-/**
- * 新建成功后直接进入翻译器。
- */
-function handleProjectCreated(projectID: string): void {
-  createModalOpen.value = false;
-  handleOpenProject(projectID);
-}
-
-/**
- * 删除项目前进行确认。
- */
-function handleDeleteProject(projectID: string): void {
-  const targetProject = projects.value.find(
-    (projectRecord) => projectRecord.id === projectID,
-  );
-
-  if (!targetProject) {
-    return;
-  }
-
-  Modal.confirm({
-    title: "删除本地项目",
-    content: `确认删除“${targetProject.title}”吗？web 端导入的图片缓存也会被一并清理。`,
-    okText: "确认删除",
-    cancelText: "取消",
-    async onOk() {
-      await localProjectsStore.deleteProject(projectID);
-      message.success("项目已删除");
-    },
-  });
-}
+const {
+  activeProject,
+  createModalOpen,
+  filteredOnlineParticipations,
+  filteredProjects,
+  formatParticipationTimestamp,
+  handleDeleteProject,
+  handleOpenOnlineChapter,
+  handleOpenProject,
+  handleProjectCreated,
+  loadMyOnlineAssignments,
+  localProjectEmptyText,
+  onlineAssignmentsErrorMessage,
+  onlineAssignmentsLoading,
+  onlineParticipationEmptyText,
+  onlineParticipations,
+  projects,
+  searchKeyword,
+  summaryCards,
+  toolbarHint,
+} = useDashboardView();
 </script>
-
-<style scoped lang="scss">
-.workspace-layout {
-  height: 100%;
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.workspace-header {
-  min-height: 56px;
-  background: var(--dashboard-header-bg);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--dashboard-header-border);
-  padding: 0 20px;
-}
-
-.workspace-header__left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.workspace-header__title {
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.workspace-header__subtitle {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.workspace-content {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 20px;
-}
-
-.workspace-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 16px;
-}
-
-.workspace-toolbar__search {
-  width: min(460px, 100%);
-}
-
-.workspace-toolbar__hint {
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.summary-row {
-  margin-bottom: 16px;
-}
-
-.summary-card {
-  border-radius: 14px;
-  background: var(--surface);
-  border: 1px solid var(--panel-border);
-  backdrop-filter: blur(14px) saturate(118%);
-}
-
-.workspace-project-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-}
-
-.workspace-project-grid__item {
-  min-width: 0;
-}
-
-.workspace-empty-state {
-  min-height: 320px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-:global(.workspace-layout .ant-card-head) {
-  border-bottom: 1px solid var(--table-border-color);
-}
-
-:global(.workspace-layout .ant-card-head-title) {
-  color: var(--text-primary);
-}
-
-:global(.workspace-layout .ant-statistic-title) {
-  color: var(--text-muted);
-}
-
-:global(.workspace-layout .ant-statistic-content) {
-  color: var(--text-primary);
-}
-
-@media (max-width: 960px) {
-  .workspace-header {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    gap: 12px;
-    padding-top: 10px;
-    padding-bottom: 10px;
-  }
-
-  .workspace-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .workspace-toolbar__search {
-    width: 100%;
-  }
-}
-
-@media (max-width: 720px) {
-  .workspace-header__subtitle {
-    display: none;
-  }
-
-  .workspace-project-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-:global(html[data-theme="dark"]) {
-  .summary-card {
-    background: var(--panel-bg);
-    color: var(--text-primary);
-  }
-
-  .workspace-header__title {
-    color: var(--text-primary);
-  }
-}
-</style>
+<style src="./dashboardView.scss" lang="scss"></style>

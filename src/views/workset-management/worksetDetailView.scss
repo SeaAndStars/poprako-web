@@ -87,7 +87,7 @@ html[data-theme="dark"] .workset-detail-view {
 
 .workset-summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
   margin-top: 20px;
 }
@@ -268,6 +268,7 @@ html[data-theme="dark"] .workset-detail-view {
 .chapter-card__header {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 18px;
 }
 
@@ -276,6 +277,19 @@ html[data-theme="dark"] .workset-detail-view {
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
+}
+
+.chapter-card__title-copy {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.chapter-card__title-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .chapter-card__title {
@@ -293,7 +307,18 @@ html[data-theme="dark"] .workset-detail-view {
 .chapter-card__title-actions {
   display: flex;
   gap: 8px;
-  margin-top: 10px;
+  align-items: center;
+  padding-top: 2px;
+}
+
+.chapter-card__title-actions :where(.ant-badge) {
+  line-height: 1;
+}
+
+.chapter-card__tags {
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding-top: 2px;
 }
 
 .chapter-card__tags,
@@ -311,7 +336,25 @@ html[data-theme="dark"] .workset-detail-view {
   margin-top: 12px;
   color: var(--workset-muted);
   font-size: 13px;
+  align-items: center;
   gap: 10px 14px;
+}
+
+.chapter-card__creator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.chapter-card__creator :where(.ant-avatar) {
+  background: color-mix(in srgb, var(--workset-accent) 22%, transparent);
+}
+
+.chapter-card__timestamp {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
 }
 
 .chapter-card__stats {
@@ -369,6 +412,7 @@ html[data-theme="dark"] .workset-detail-view {
   display: flex;
   gap: 12px;
   align-items: center;
+  justify-content: space-between;
 }
 
 .chapter-card__progress-line {
@@ -437,6 +481,60 @@ html[data-theme="dark"] .workset-detail-view {
   margin-top: 12px;
 }
 
+.role-manager__current {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--workset-border);
+  border-radius: 16px;
+  background: var(--workset-surface-strong);
+}
+
+.role-manager__current--multi {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.role-manager__current-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.role-manager__current-name {
+  font-weight: 700;
+}
+
+.role-manager__current-meta {
+  color: var(--workset-muted);
+  font-size: 12px;
+}
+
+.role-manager__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.role-manager__occupants {
+  display: grid;
+  gap: 10px;
+}
+
+.role-manager__occupant-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.role-manager__empty {
+  padding: 12px 14px;
+  border: 1px dashed color-mix(in srgb, var(--workset-border) 72%, transparent);
+  border-radius: 14px;
+  color: var(--workset-muted);
+  background: color-mix(in srgb, var(--workset-surface-strong) 88%, transparent);
+}
+
 .workset-empty-state {
   padding: 28px 0 12px;
 }
@@ -451,6 +549,16 @@ html[data-theme="dark"] .workset-detail-view {
   max-width: 420px;
   color: var(--workset-muted);
   line-height: 1.65;
+}
+
+.workset-assignee {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workset-assignee__name {
+  color: var(--workset-text);
 }
 
 .workset-detail-view :where(.ant-tag) {
@@ -489,7 +597,8 @@ html[data-theme="dark"] .workset-detail-view {
   .chapter-card__header,
   .chapter-card__footer,
   .chapter-card__title-row,
-  .review-request-card__header {
+  .review-request-card__header,
+  .role-manager__occupant-row {
     flex-direction: column;
   }
 

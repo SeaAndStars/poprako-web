@@ -8,24 +8,36 @@
         <div>
           <span class="mm-section-heading__title">公共成员区</span>
           <p class="mm-section-heading__subtitle">
-            所有成员都可查看名单；只有管理员会在此看到角色编辑和移除操作。
+            所有成员都可查看名单；输入名字或 QQ
+            只筛选当前团队，只有管理员会看到编辑与移除操作。
           </p>
         </div>
       </div>
     </template>
 
     <template #extra>
-      <a-space size="small">
-        <a-tag v-if="selectedTeamInfo" color="processing">
-          {{ selectedTeamInfo.name }}
-        </a-tag>
-        <a-tag color="processing">成员数 {{ members.length }}</a-tag>
-      </a-space>
+      <div class="mm-member-table-extra">
+        <a-input-search
+          :value="memberSearchKeyword"
+          class="mm-member-search"
+          placeholder="搜索当前团队成员名字或 QQ"
+          allow-clear
+          :disabled="!hasSelectedTeam"
+          @update:value="handleMemberSearchKeywordChange"
+        />
+
+        <a-space size="small">
+          <a-tag v-if="selectedTeamInfo" color="processing">
+            {{ selectedTeamInfo.name }}
+          </a-tag>
+          <a-tag color="processing">{{ memberCountLabel }}</a-tag>
+        </a-space>
+      </div>
     </template>
 
     <a-table
       :columns="memberColumns"
-      :data-source="members"
+      :data-source="filteredMembers"
       row-key="id"
       :loading="detailLoading"
       size="middle"
@@ -36,9 +48,7 @@
         hideOnSinglePage: true,
         showSizeChanger: false,
       }"
-      :locale="{
-        emptyText: hasSelectedTeam ? '当前团队暂无成员记录' : '请先选择团队',
-      }"
+      :locale="{ emptyText: memberEmptyText }"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'user'">
@@ -53,7 +63,7 @@
             <div class="mm-member-cell__content">
               <div class="mm-member-cell__top">
                 <span class="mm-member-cell__name">
-                  {{ record.user?.name || record.user_id }}
+                  {{ resolveMemberDisplayName(record) }}
                 </span>
                 <a-tag
                   v-if="record.user_id === currentUser?.id"
@@ -63,7 +73,6 @@
                   我
                 </a-tag>
               </div>
-              <span class="mm-member-cell__meta">{{ record.user_id }}</span>
             </div>
           </div>
         </template>
@@ -138,16 +147,41 @@ import { useMemberManagementContext } from "./useMemberManagement";
 const {
   currentUser,
   members,
+  filteredMembers,
   detailLoading,
   hasSelectedTeam,
+  memberSearchKeyword,
+  hasActiveMemberSearch,
+  memberSearchResultCount,
   selectedTeamInfo,
   canAccessAdminArea,
   formatTimestamp,
   resolveRoleEntries,
   resolveMemberAvatarUrl,
+  setMemberSearchKeyword,
   openMemberEditModal,
   handleDeleteMember,
 } = useMemberManagementContext();
+
+const memberEmptyText = computed(() => {
+  if (!hasSelectedTeam.value) {
+    return "请先选择团队";
+  }
+
+  if (hasActiveMemberSearch.value) {
+    return "当前团队没有匹配的成员";
+  }
+
+  return "当前团队暂无成员记录";
+});
+
+const memberCountLabel = computed(() => {
+  if (hasActiveMemberSearch.value) {
+    return `结果 ${memberSearchResultCount.value}/${members.value.length}`;
+  }
+
+  return `成员数 ${memberSearchResultCount.value}`;
+});
 
 const memberColumns = computed<TableColumnsType<MemberInfo>>(() => {
   const columns: TableColumnsType<MemberInfo> = [
@@ -188,9 +222,19 @@ const memberColumns = computed<TableColumnsType<MemberInfo>>(() => {
 });
 
 function resolveMemberFallback(memberInfo: MemberInfo): string {
-  return (memberInfo.user?.name || memberInfo.user_id || "?")
-    .slice(0, 1)
-    .toUpperCase();
+  return resolveMemberDisplayName(memberInfo).slice(0, 1).toUpperCase();
+}
+
+function resolveMemberDisplayName(memberInfo: MemberInfo): string {
+  const normalizedName = memberInfo.user?.name?.trim();
+
+  return normalizedName && normalizedName.length > 0
+    ? normalizedName
+    : "未命名成员";
+}
+
+function handleMemberSearchKeywordChange(nextKeyword: string): void {
+  setMemberSearchKeyword(nextKeyword);
 }
 
 function resolveMemberRowClassName(memberInfo: MemberInfo): string {

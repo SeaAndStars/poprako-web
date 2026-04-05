@@ -9,13 +9,13 @@ import {
   type InjectionKey,
 } from "vue";
 import { Modal, message } from "ant-design-vue";
+import { storeToRefs } from "pinia";
 import {
   confirmTeamAvatarUploaded,
   createInvitation,
   createMember,
   createTeam,
   deleteTeam,
-  getCurrentUserProfile,
   deleteInvitation,
   deleteMember,
   getInvitationList,
@@ -27,17 +27,12 @@ import {
   updateMemberRole,
 } from "../../api/modules";
 import {
-  appendCacheBustQueryToUrl,
-  resolveAssetUrl,
   resolveImageFileExtension,
   uploadFileToPresignedPutUrl,
 } from "../../api/objectStorage";
-import type {
-  InvitationInfo,
-  MemberInfo,
-  TeamInfo,
-  UserInfo,
-} from "../../types/domain";
+import { useAvatarDisplayUrl } from "../../composables/useAvatarDisplayUrl";
+import { useAuthStore } from "../../stores/auth";
+import type { InvitationInfo, MemberInfo, TeamInfo } from "../../types/domain";
 
 export type InvitationModalMode = "create" | "edit";
 export type MemberModalMode = "create" | "edit";
@@ -100,7 +95,11 @@ function formatTimestamp(rawTime: number | undefined): string {
 }
 
 function createMemberManagementState() {
-  const currentUserLoading = ref(false);
+  const authStore = useAuthStore();
+  const {
+    currentUserProfile: currentUser,
+    currentUserProfileLoading: currentUserLoading,
+  } = storeToRefs(authStore);
   const teamsLoading = ref(false);
   const detailLoading = ref(false);
   const teamCreateSubmitting = ref(false);
@@ -110,12 +109,12 @@ function createMemberManagementState() {
   const teamDeleteSubmitting = ref(false);
   const teamAvatarSubmitting = ref(false);
 
-  const currentUser = ref<UserInfo | null>(null);
   const teams = ref<TeamInfo[]>([]);
   const invitations = ref<InvitationInfo[]>([]);
   const members = ref<MemberInfo[]>([]);
 
   const selectedTeamID = ref<string | undefined>(undefined);
+  const memberSearchKeyword = ref("");
   const selectedTeamAvatarFile = ref<File | null>(null);
   const teamAvatarResetToken = ref(0);
 
@@ -156,6 +155,10 @@ function createMemberManagementState() {
   const teamDeleteForm = reactive({
     confirmationText: "",
   });
+  const {
+    resolveTeamAvatarUrl: resolveDisplayTeamAvatarUrl,
+    resolveUserAvatarUrl,
+  } = useAvatarDisplayUrl();
 
   const pageLoading = computed(() => {
     return (
@@ -225,17 +228,39 @@ function createMemberManagementState() {
     }).length;
   });
 
+  const hasActiveMemberSearch = computed(() => {
+    return memberSearchKeyword.value.trim().length > 0;
+  });
+
+  const filteredMembers = computed(() => {
+    const normalizedKeyword = memberSearchKeyword.value.trim().toLowerCase();
+
+    if (normalizedKeyword.length === 0) {
+      return members.value;
+    }
+
+    return members.value.filter((memberInfo) => {
+      const displayName = memberInfo.user?.name?.trim().toLowerCase() || "";
+      const qq = memberInfo.user?.qq?.trim().toLowerCase() || "";
+
+      return (
+        displayName.includes(normalizedKeyword) ||
+        qq.includes(normalizedKeyword)
+      );
+    });
+  });
+
+  const memberSearchResultCount = computed(() => filteredMembers.value.length);
+
   function resolveTeamAvatarUrl(teamInfo: TeamInfo): string | undefined {
-    return appendCacheBustQueryToUrl(
-      teamInfo.avatar_url || teamInfo.avatar,
+    return resolveDisplayTeamAvatarUrl(
+      teamInfo,
       teamAvatarCacheBustTokens[teamInfo.id] || teamInfo.updated_at,
     );
   }
 
   function resolveMemberAvatarUrl(memberInfo: MemberInfo): string | undefined {
-    return resolveAssetUrl(
-      memberInfo.user?.avatar_url || memberInfo.user?.avatar,
-    );
+    return resolveUserAvatarUrl(memberInfo.user);
   }
 
   function resetTeamAvatarSelection(): void {
@@ -255,7 +280,16 @@ function createMemberManagementState() {
   function clearCurrentTeamDetails(): void {
     invitations.value = [];
     members.value = [];
+    memberSearchKeyword.value = "";
     resetTeamAvatarSelection();
+  }
+
+  function setMemberSearchKeyword(nextKeyword: string): void {
+    memberSearchKeyword.value = nextKeyword;
+  }
+
+  function clearMemberSearchKeyword(): void {
+    memberSearchKeyword.value = "";
   }
 
   function resetInvitationForm(): void {
@@ -283,13 +317,7 @@ function createMemberManagementState() {
       return;
     }
 
-    currentUserLoading.value = true;
-
-    try {
-      currentUser.value = await getCurrentUserProfile();
-    } finally {
-      currentUserLoading.value = false;
-    }
+    await authStore.ensureCurrentUserProfileLoaded();
   }
 
   function requireSelectedTeam(): boolean {
@@ -323,6 +351,13 @@ function createMemberManagementState() {
       nextTeams.some((teamInfo) => teamInfo.id === preferredTeamID)
     ) {
       return preferredTeamID;
+    }
+
+    if (
+      authStore.currentTeamId &&
+      nextTeams.some((teamInfo) => teamInfo.id === authStore.currentTeamId)
+    ) {
+      return authStore.currentTeamId;
     }
 
     if (
@@ -398,6 +433,7 @@ function createMemberManagementState() {
     teamsLoading.value = true;
 
     try {
+      const previousSelectedTeamID = selectedTeamID.value;
       const nextTeams = await getMyTeams({
         offset: 0,
         limit: 100,
@@ -410,7 +446,16 @@ function createMemberManagementState() {
         preferredTeamID,
       );
 
+      if (previousSelectedTeamID !== nextSelectedTeamID) {
+        memberSearchKeyword.value = "";
+      }
+
       selectedTeamID.value = nextSelectedTeamID;
+      if (nextSelectedTeamID) {
+        authStore.setCurrentTeamId(nextSelectedTeamID);
+      } else {
+        authStore.clearCurrentTeamId();
+      }
 
       if (nextSelectedTeamID) {
         await loadSelectedTeamDetails(nextSelectedTeamID, false);
@@ -437,7 +482,9 @@ function createMemberManagementState() {
   function handleTeamChange(nextTeamID: string): void {
     resetTeamAvatarSelection();
     resetTeamDeleteForm();
+    clearMemberSearchKeyword();
     selectedTeamID.value = nextTeamID;
+    authStore.setCurrentTeamId(nextTeamID);
     void loadSelectedTeamDetails(nextTeamID);
   }
 
@@ -859,6 +906,12 @@ function createMemberManagementState() {
 
       teams.value = nextTeams;
       selectedTeamID.value = resolvePreferredTeamID(nextTeams, joinedTeamID);
+      if (selectedTeamID.value) {
+        authStore.setCurrentTeamId(selectedTeamID.value);
+      } else {
+        authStore.clearCurrentTeamId();
+      }
+      clearMemberSearchKeyword();
 
       if (selectedTeamID.value) {
         await loadSelectedTeamDetails(selectedTeamID.value, false);
@@ -959,12 +1012,18 @@ function createMemberManagementState() {
     canAccessAdminArea,
     pendingInvitationCount,
     adminMemberCount,
+    memberSearchKeyword,
+    hasActiveMemberSearch,
+    filteredMembers,
+    memberSearchResultCount,
     formatTimestamp,
     resolveRoleEntries,
     resolveTeamAvatarUrl,
     resolveMemberAvatarUrl,
     ensureCurrentUserLoaded,
     refreshManagementData,
+    setMemberSearchKeyword,
+    clearMemberSearchKeyword,
     handleTeamChange,
     openTeamCreateModal,
     handleTeamCreateModalCancel,

@@ -73,6 +73,31 @@ function readFileAsDataURL(file: File): Promise<string> {
 }
 
 /**
+ * 将任意 Blob 转换为 data URL。
+ * 在线工作区的整章缓存会先把远端图片抓成本地 Blob，再复用同一套 IndexedDB 存储。
+ */
+function readBlobAsDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onerror = () => {
+      reject(reader.error ?? new Error("读取图片 Blob 失败"));
+    };
+
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("图片 Blob 读取结果无效"));
+        return;
+      }
+
+      resolve(reader.result);
+    };
+
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
  * 生成稳定资源 ID。
  */
 function createAssetID(): string {
@@ -115,6 +140,46 @@ export async function storeWebProjectImageAsset(file: File): Promise<string> {
 
     transaction.onerror = () => {
       reject(transaction.error ?? new Error("写入本地项目图片失败"));
+    };
+  });
+
+  database.close();
+  return assetID;
+}
+
+/**
+ * 将远端下载后的 Blob 写入 IndexedDB。
+ * 这使在线章节也能走与本地导入相同的图片读取链路。
+ */
+export async function storeWebProjectImageAssetBlob(
+  blob: Blob,
+  name: string,
+): Promise<string> {
+  const database = await openLocalProjectAssetDatabase();
+  const dataURL = await readBlobAsDataURL(blob);
+  const assetID = createAssetID();
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(
+      LOCAL_PROJECT_ASSET_STORE_NAME,
+      "readwrite",
+    );
+    const store = transaction.objectStore(LOCAL_PROJECT_ASSET_STORE_NAME);
+
+    store.put({
+      id: assetID,
+      name,
+      data_url: dataURL,
+      mime_type: blob.type || "image/*",
+      updated_at: new Date().toISOString(),
+    } satisfies LocalProjectImageAssetRecord);
+
+    transaction.oncomplete = () => {
+      resolve();
+    };
+
+    transaction.onerror = () => {
+      reject(transaction.error ?? new Error("写入在线章节图片缓存失败"));
     };
   });
 

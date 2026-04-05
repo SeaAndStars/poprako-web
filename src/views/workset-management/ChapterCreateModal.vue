@@ -23,6 +23,30 @@
         :message="chapterNumberAlert"
       />
 
+      <div
+        v-if="(props.defaultRoleSummaries || []).length > 0"
+        class="chapter-default-role-panel"
+      >
+        <div class="chapter-default-role-panel__title">
+          创建后会自动写入以下章节岗位；未配置的岗位会保持空缺，继续走申请流程。
+        </div>
+
+        <div class="chapter-default-role-panel__grid">
+          <div
+            v-for="summary in props.defaultRoleSummaries || []"
+            :key="summary.key"
+            class="chapter-default-role-panel__item"
+          >
+            <div class="chapter-default-role-panel__label">
+              {{ summary.roleLabel }}
+            </div>
+            <div class="chapter-default-role-panel__value">
+              {{ summary.assigneeName || "未配置默认负责人" }}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <a-form-item label="第几话 (可选)">
         <a-input-number
           v-model:value="form.chapterNumber"
@@ -33,9 +57,7 @@
         />
         <div class="chapter-form-hint">
           留空则自动创建第
-          {{
-            nextChapterNumber
-          }}
+          {{ nextChapterNumber }}
           话；如需跳号，可手动指定新的未使用话数。已使用过的历史编号也不能复用。
         </div>
       </a-form-item>
@@ -69,6 +91,26 @@
         <div v-if="selectedFileCount > 0" class="chapter-upload-summary">
           已选择 {{ selectedFileCount }} 张图片。
         </div>
+
+        <div v-if="submitting" class="chapter-upload-progress">
+          <div class="chapter-upload-progress__head">
+            <span>上传进度</span>
+            <strong>{{ uploadProgressPercent }}%</strong>
+          </div>
+
+          <a-progress
+            status="active"
+            :percent="uploadProgressPercent"
+            :show-info="false"
+          />
+
+          <div class="chapter-upload-progress__hint">
+            已完成 {{ uploadedFileCount }} / {{ selectedFileCount }} 张
+            <span v-if="currentUploadingFileName">
+              ，当前：{{ currentUploadingFileName }}
+            </span>
+          </div>
+        </div>
       </a-form-item>
     </a-form>
   </a-modal>
@@ -95,6 +137,11 @@ interface Props {
   comicId?: string;
   comicTitle?: string;
   chapterCount?: number;
+  defaultRoleSummaries?: Array<{
+    key: string;
+    roleLabel: string;
+    assigneeName?: string;
+  }>;
   nextChapterNumber?: number;
   usedChapterNumbers?: number[];
 }
@@ -112,6 +159,9 @@ const emit = defineEmits<{
 }>();
 
 const submitting = ref(false);
+const uploadProgressPercent = ref(0);
+const uploadedFileCount = ref(0);
+const currentUploadingFileName = ref<string | undefined>(undefined);
 const selectedFiles = ref<Array<{ uid: string; file: File }>>([]);
 const fileList = computed<UploadFile[]>(() => {
   return selectedFiles.value.map(({ uid, file }) => ({
@@ -186,6 +236,13 @@ function resetForm(): void {
   form.subtitle = "";
   form.chapterNumber = null;
   selectedFiles.value = [];
+  resetUploadProgress();
+}
+
+function resetUploadProgress(): void {
+  uploadProgressPercent.value = 0;
+  uploadedFileCount.value = 0;
+  currentUploadingFileName.value = undefined;
 }
 
 function getSelectedFiles(): File[] {
@@ -257,6 +314,7 @@ async function handleSubmit(): Promise<void> {
   }
 
   submitting.value = true;
+  resetUploadProgress();
   const messageKey = "create-chapter-upload";
 
   try {
@@ -282,17 +340,50 @@ async function handleSubmit(): Promise<void> {
       throw new Error("页面预留数量与上传文件数量不一致");
     }
 
+    const totalUploadBytes = selectedFiles.reduce(
+      (totalBytes, file) => totalBytes + (file.size || 0),
+      0,
+    );
+    let completedUploadBytes = 0;
+
     for (const [index, pageCreation] of reserveResult.creations.entries()) {
       const file = selectedFiles[index];
       const contentType = buildImageContentType(file, normalizedExtensions[0]);
+      const fileSize = file.size || 0;
+
+      currentUploadingFileName.value = file.name;
 
       await uploadFileToPresignedPutUrl(
         pageCreation.put_url,
         file,
         contentType,
+        {
+          onProgress: ({ loaded }) => {
+            const currentUploadedBytes = completedUploadBytes + loaded;
+            uploadProgressPercent.value = totalUploadBytes
+              ? Math.min(
+                  100,
+                  Math.round((currentUploadedBytes / totalUploadBytes) * 100),
+                )
+              : 0;
+          },
+        },
       );
+
+      completedUploadBytes += fileSize;
+      uploadedFileCount.value = index + 1;
+      uploadProgressPercent.value = totalUploadBytes
+        ? Math.min(
+            100,
+            Math.round((completedUploadBytes / totalUploadBytes) * 100),
+          )
+        : 100;
+
       await updatePage(pageCreation.page_id, { is_uploaded: true });
     }
+
+    currentUploadingFileName.value = undefined;
+    uploadProgressPercent.value = 100;
 
     message.success({
       content: `第 ${chapterNumber ?? nextChapterNumber.value} 话已创建，并完成 ${selectedFiles.length} 张底图上传`,
@@ -324,10 +415,94 @@ async function handleSubmit(): Promise<void> {
   font-size: 12px;
 }
 
+.chapter-upload-progress {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid
+    color-mix(in srgb, var(--color-border, #dbe5f0) 82%, transparent);
+  border-radius: 12px;
+  background: color-mix(
+    in srgb,
+    var(--color-bg-elevated, #f8fafc) 90%,
+    white 10%
+  );
+}
+
+.chapter-upload-progress__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: var(--color-text, #0f172a);
+  font-size: 13px;
+}
+
+.chapter-upload-progress__hint {
+  margin-top: 10px;
+  color: var(--color-on-surface-variant, #64748b);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.chapter-default-role-panel {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid
+    color-mix(in srgb, var(--color-border, #dbe5f0) 82%, transparent);
+  border-radius: 12px;
+  background: color-mix(
+    in srgb,
+    var(--color-bg-elevated, #f8fafc) 88%,
+    white 12%
+  );
+}
+
+.chapter-default-role-panel__title {
+  color: var(--color-text-secondary, #475569);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.chapter-default-role-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.chapter-default-role-panel__item {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(
+    in srgb,
+    var(--color-bg-container, white) 90%,
+    transparent
+  );
+}
+
+.chapter-default-role-panel__label {
+  color: var(--color-text-secondary, #64748b);
+  font-size: 12px;
+}
+
+.chapter-default-role-panel__value {
+  margin-top: 4px;
+  color: var(--color-text, #0f172a);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .chapter-form-hint {
   margin-top: 8px;
   color: var(--color-on-surface-variant, #64748b);
   font-size: 12px;
   line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .chapter-default-role-panel__grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

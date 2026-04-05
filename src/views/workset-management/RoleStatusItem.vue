@@ -5,7 +5,7 @@
         type="button"
         class="role-badge"
         :class="badgeClassNames"
-        :disabled="actionPending || !canInteract"
+        :disabled="actionPending || !canPrimaryAction"
         @click="handlePrimaryAction"
       >
         <span class="role-icon">
@@ -13,17 +13,73 @@
           <ClockCircleFilled v-else-if="hasMyPendingRequest" />
           <ExclamationCircleFilled v-else />
         </span>
-        <span class="role-name">{{ roleLabel }}</span>
-        <span
-          v-if="roleSlot.pending_request_count > 0"
-          class="role-count"
-          :class="{ 'is-highlight': canReviewRequests }"
-        >
-          {{ roleSlot.pending_request_count }}
+        <span class="role-copy">
+          <span class="role-copy__top">
+            <span class="role-name">{{ roleLabel }}</span>
+            <span
+              v-if="roleSlot.pending_request_count > 0"
+              class="role-count"
+              :class="{ 'is-highlight': canReviewRequests }"
+            >
+              {{ roleSlot.pending_request_count }}
+            </span>
+            <span v-if="actionText" class="role-action">{{ actionText }}</span>
+          </span>
+          <span class="role-copy__bottom">
+            <span v-if="hasAssignedUser" class="role-occupants">
+              <a-avatar
+                v-for="occupant in displayOccupants"
+                :key="occupant.id"
+                :size="22"
+                :src="resolveRoleOccupantAvatarUrl(occupant)"
+              >
+                {{ resolveRoleOccupantInitial(occupant) }}
+              </a-avatar>
+              <span v-if="extraOccupantCount > 0" class="role-occupants__more">
+                +{{ extraOccupantCount }}
+              </span>
+            </span>
+            <span class="role-occupant">{{ occupantSummary }}</span>
+          </span>
         </span>
-        <span v-if="actionText" class="role-action">{{ actionText }}</span>
       </button>
     </a-tooltip>
+
+    <div v-if="canOpenWorkspace || props.canManage" class="role-slot__utility">
+      <a-tooltip
+        v-if="canOpenWorkspace"
+        :title="workspaceTooltip"
+        placement="top"
+      >
+        <a-button
+          type="text"
+          size="small"
+          class="role-slot__utility-btn"
+          :disabled="actionPending"
+          @click="handleWorkspaceClick"
+        >
+          <template #icon>
+            <ReadOutlined v-if="workspaceMode === 'translate'" />
+            <FileSearchOutlined v-else />
+          </template>
+        </a-button>
+      </a-tooltip>
+      <a-tooltip
+        v-if="props.canManage"
+        title="直接指定、改派或清空负责人"
+        placement="top"
+      >
+        <a-button
+          type="text"
+          size="small"
+          class="role-slot__utility-btn"
+          :disabled="actionPending"
+          @click="handleManageClick"
+        >
+          <template #icon><EditOutlined /></template>
+        </a-button>
+      </a-tooltip>
+    </div>
   </div>
 </template>
 
@@ -32,40 +88,113 @@ import { computed, ref } from "vue";
 import {
   CheckCircleFilled,
   ClockCircleFilled,
+  EditOutlined,
   ExclamationCircleFilled,
+  FileSearchOutlined,
+  ReadOutlined,
 } from "@ant-design/icons-vue";
 import { message } from "ant-design-vue";
 
 import { createRoleRequest, withdrawRoleRequest } from "../../api/modules";
+import { useAvatarDisplayUrl } from "../../composables/useAvatarDisplayUrl";
 import type {
   UserInfo,
   WorksetBoardChapterInfo,
   WorksetBoardRoleSlotInfo,
 } from "../../types/domain";
 
+const TRANSLATOR_ROLE_VALUE = 2;
+
 const props = defineProps<{
   roleLabel: string;
   roleValue: number;
   roleSlot: WorksetBoardRoleSlotInfo;
   chapter: WorksetBoardChapterInfo;
+  currentUserId?: string;
   currentMemberRoleMask?: number;
   appliedTeamId?: string;
   defaultUser?: UserInfo;
   canReview?: boolean;
+  canManage?: boolean;
+  workspaceMode?: "translate" | "proofread";
 }>();
 
 const emit = defineEmits<{
   (event: "changed"): void;
+  (event: "manage"): void;
+  (event: "workspace"): void;
 }>();
 
 const actionPending = ref(false);
+const { resolveUserAvatarUrl: resolveRoleOccupantAvatarUrl } =
+  useAvatarDisplayUrl();
 
-const hasAssignedUser = computed(() => Boolean(props.roleSlot.occupant?.id));
+function resolveRoleOccupants(roleSlot: WorksetBoardRoleSlotInfo): UserInfo[] {
+  const occupants = Array.isArray(roleSlot.occupants)
+    ? roleSlot.occupants.filter((userInfo): userInfo is UserInfo =>
+        Boolean(userInfo?.id),
+      )
+    : [];
+
+  if (occupants.length > 0) {
+    return occupants;
+  }
+
+  return roleSlot.occupant?.id ? [roleSlot.occupant] : [];
+}
+
+function resolveRoleOccupantInitial(userInfo: UserInfo): string {
+  return (
+    userInfo.name?.trim().charAt(0) || userInfo.id?.trim().charAt(0) || "?"
+  );
+}
+
+function formatOccupantList(users: UserInfo[]): string {
+  if (users.length === 0) {
+    return "";
+  }
+
+  if (users.length <= 3) {
+    return users
+      .map((userInfo) => userInfo.name || userInfo.id || "未知成员")
+      .join("、");
+  }
+
+  const previewNames = users
+    .slice(0, 3)
+    .map((userInfo) => userInfo.name || userInfo.id || "未知成员")
+    .join("、");
+
+  return `${previewNames} 等 ${users.length} 人`;
+}
+
+const roleOccupants = computed(() => resolveRoleOccupants(props.roleSlot));
+const displayOccupants = computed(() => roleOccupants.value.slice(0, 3));
+const extraOccupantCount = computed(() =>
+  Math.max(roleOccupants.value.length - displayOccupants.value.length, 0),
+);
+const hasAssignedUser = computed(() => roleOccupants.value.length > 0);
 const hasMyPendingRequest = computed(() =>
   Boolean(props.roleSlot.my_pending_request_id),
 );
+const allowsMultipleOccupants = computed(
+  () => props.roleValue === TRANSLATOR_ROLE_VALUE,
+);
+const currentUserAssigned = computed(() => {
+  if (!props.currentUserId) {
+    return false;
+  }
+
+  return roleOccupants.value.some(
+    (userInfo) => userInfo.id === props.currentUserId,
+  );
+});
 const canApply = computed(() => {
-  if (hasAssignedUser.value || hasMyPendingRequest.value) {
+  if (hasMyPendingRequest.value || currentUserAssigned.value) {
+    return false;
+  }
+
+  if (!allowsMultipleOccupants.value && hasAssignedUser.value) {
     return false;
   }
 
@@ -79,7 +208,15 @@ const canWithdraw = computed(() => hasMyPendingRequest.value);
 const canReviewRequests = computed(() => {
   return Boolean(props.canReview && props.roleSlot.pending_request_count > 0);
 });
-const canInteract = computed(() => canApply.value || canWithdraw.value);
+const canOpenWorkspace = computed(() => {
+  return Boolean(props.workspaceMode && currentUserAssigned.value);
+});
+const canPrimaryOpenWorkspace = computed(() => {
+  return canOpenWorkspace.value;
+});
+const canPrimaryAction = computed(() => {
+  return canApply.value || canWithdraw.value || canPrimaryOpenWorkspace.value;
+});
 
 const actionText = computed(() => {
   if (canWithdraw.value) {
@@ -90,6 +227,10 @@ const actionText = computed(() => {
     return "申请";
   }
 
+  if (canPrimaryOpenWorkspace.value) {
+    return "进入";
+  }
+
   return "";
 });
 
@@ -97,8 +238,32 @@ const badgeClassNames = computed(() => ({
   assigned: hasAssignedUser.value,
   pending: hasMyPendingRequest.value,
   vacant: !hasAssignedUser.value && !hasMyPendingRequest.value,
-  actionable: canInteract.value,
+  actionable: canPrimaryAction.value,
 }));
+
+const workspaceMode = computed(() => props.workspaceMode);
+
+const occupantSummary = computed(() => {
+  if (hasAssignedUser.value) {
+    return formatOccupantList(roleOccupants.value);
+  }
+
+  if (hasMyPendingRequest.value) {
+    return "已提交申请，等待审批";
+  }
+
+  if (props.defaultUser?.name) {
+    return `默认负责人 ${props.defaultUser.name}`;
+  }
+
+  return "当前岗位空缺";
+});
+
+const workspaceTooltip = computed(() => {
+  return props.workspaceMode === "proofread"
+    ? "进入在线校对工作台"
+    : "进入在线翻译工作台";
+});
 
 const displayChapterIndex = computed(() => {
   return typeof props.chapter.index === "number"
@@ -108,15 +273,18 @@ const displayChapterIndex = computed(() => {
 
 const hoverText = computed(() => {
   if (hasAssignedUser.value) {
-    const occupantName =
-      props.roleSlot.occupant?.name ||
-      props.roleSlot.occupant?.id ||
-      "未知成员";
+    const occupantName = formatOccupantList(roleOccupants.value) || "未知成员";
     const pendingSuffix =
       props.roleSlot.pending_request_count > 0
         ? `，另有 ${props.roleSlot.pending_request_count} 个申请待审批`
         : "";
-    return `${props.roleLabel} 当前负责人：${occupantName}${pendingSuffix}`;
+    const currentUserSuffix = currentUserAssigned.value
+      ? "，你已在当前负责列表中"
+      : "";
+    const workspaceHint = canOpenWorkspace.value
+      ? `，点击即可${props.workspaceMode === "proofread" ? "在线校对" : "在线翻译"}`
+      : "";
+    return `${props.roleLabel} 当前负责人：${occupantName}${currentUserSuffix}${pendingSuffix}${workspaceHint}`;
   }
 
   if (hasMyPendingRequest.value) {
@@ -131,7 +299,12 @@ const hoverText = computed(() => {
 });
 
 async function handlePrimaryAction(): Promise<void> {
-  if (actionPending.value || !canInteract.value) {
+  if (actionPending.value || !canPrimaryAction.value) {
+    return;
+  }
+
+  if (canPrimaryOpenWorkspace.value && !canApply.value && !canWithdraw.value) {
+    emit("workspace");
     return;
   }
 
@@ -186,6 +359,14 @@ async function handlePrimaryAction(): Promise<void> {
     actionPending.value = false;
   }
 }
+
+function handleManageClick(): void {
+  emit("manage");
+}
+
+function handleWorkspaceClick(): void {
+  emit("workspace");
+}
 </script>
 
 <style scoped lang="scss">
@@ -223,11 +404,16 @@ async function handlePrimaryAction(): Promise<void> {
     var(--control-btn-primary-bg) 60%,
     #b91c1c 40%
   );
+  --role-utility-text: color-mix(
+    in srgb,
+    var(--text-primary) 72%,
+    var(--control-btn-primary-bg) 28%
+  );
 
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+  gap: 6px;
+  min-width: 0;
 }
 
 :global(html[data-theme="dark"]) .role-slot {
@@ -238,17 +424,20 @@ async function handlePrimaryAction(): Promise<void> {
   --role-vacant-bg: color-mix(in srgb, var(--panel-bg) 94%, #020617 6%);
   --role-count-highlight-text: #fca5a5;
   --role-review-link: #f87171;
+  --role-utility-text: color-mix(in srgb, #dbeafe 76%, var(--text-primary) 24%);
 }
 
 .role-badge {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
+  gap: 10px;
+  width: 100%;
+  min-height: 54px;
+  padding: 10px 12px;
+  border-radius: 18px;
   border: 1px solid transparent;
   background: transparent;
+  text-align: left;
   font-size: 13px;
   font-weight: 600;
   transition:
@@ -284,15 +473,78 @@ async function handlePrimaryAction(): Promise<void> {
 
   &:disabled {
     cursor: default;
-    opacity: 0.92;
+    opacity: 1;
   }
 }
 
 .role-icon,
 .role-count,
-.role-action {
+.role-action,
+.role-copy__top,
+.role-copy__bottom {
   display: inline-flex;
   align-items: center;
+}
+
+.role-copy {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.role-copy__top {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.role-copy__bottom {
+  gap: 8px;
+  min-width: 0;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.role-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.role-occupants {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.role-occupants :deep(.ant-avatar) {
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--panel-border) 70%, transparent);
+
+  & + .ant-avatar {
+    margin-inline-start: -6px;
+  }
+}
+
+.role-occupants__more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  margin-inline-start: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.role-occupant {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .role-count {
@@ -314,5 +566,15 @@ async function handlePrimaryAction(): Promise<void> {
 .role-action {
   font-size: 12px;
   font-weight: 700;
+}
+
+.role-slot__utility {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.role-slot__utility-btn {
+  color: var(--role-utility-text);
 }
 </style>

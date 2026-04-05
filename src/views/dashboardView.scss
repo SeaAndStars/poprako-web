@@ -1,0 +1,417 @@
+.workspace-layout {
+  height: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-header {
+  min-height: 56px;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--dashboard-header-bg) 90%, #fff 10%),
+      color-mix(in srgb, var(--dashboard-header-bg) 94%, #dbeafe 6%)
+    );
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--dashboard-header-border);
+  padding: 0 20px;
+}
+
+.workspace-header__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.workspace-header__title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.workspace-header__subtitle {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.workspace-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px;
+}
+
+.workspace-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.workspace-toolbar__search {
+  width: min(460px, 100%);
+}
+
+.workspace-toolbar__hint {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.summary-row {
+  margin-bottom: 16px;
+}
+
+.workspace-section {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.workspace-section__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.workspace-section__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.workspace-section__description {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.workspace-section__count {
+  color: var(--text-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.summary-card {
+  border-radius: 16px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface) 90%, #f8fafc 10%),
+    var(--surface)
+  );
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(14px) saturate(118%);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+}
+
+.workspace-online-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.workspace-online-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 86%, #bfdbfe 14%);
+  background:
+    radial-gradient(circle at top right, rgba(191, 219, 254, 0.24), transparent 34%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface) 84%, #eff6ff 16%),
+      var(--surface)
+    );
+  box-shadow: 0 20px 36px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(14px) saturate(120%);
+}
+
+.workspace-online-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(90deg, #f59e0b, #22c55e);
+  opacity: 0.9;
+}
+
+.workspace-online-card .ant-card-body {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.workspace-online-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-online-card__identity {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workspace-online-card__title {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.workspace-online-card__chapter {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.workspace-online-card__timestamp {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.08);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workspace-online-card__author,
+.workspace-online-card__subtitle {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.workspace-online-card__subtitle {
+  color: var(--text-secondary);
+}
+
+.workspace-online-card__roles,
+.workspace-online-card__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workspace-online-card__roles .ant-tag {
+  margin-inline-end: 0;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.workspace-online-card__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workspace-online-card__stat {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 88%, #eff6ff 12%);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 88%, #dbeafe 12%);
+}
+
+.workspace-online-card__stat-value {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.workspace-online-card__stat-label {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.workspace-online-card__progress-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-online-card__progress-block {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.workspace-online-card__progress-block.is-translate {
+  background: linear-gradient(180deg, rgba(255, 247, 237, 0.92), rgba(255, 251, 235, 0.86));
+}
+
+.workspace-online-card__progress-block.is-proofread {
+  background: linear-gradient(180deg, rgba(240, 253, 244, 0.94), rgba(236, 253, 245, 0.88));
+}
+
+.workspace-online-card__progress-head,
+.workspace-online-card__progress-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-online-card__progress-head {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workspace-online-card__progress-head strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.workspace-online-card__progress-foot {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.workspace-inline-empty {
+  padding: 8px 0 0;
+}
+
+.workspace-project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.workspace-project-grid__item {
+  min-width: 0;
+}
+
+.workspace-empty-state {
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workspace-layout .ant-card-head {
+  border-bottom: 1px solid var(--table-border-color);
+}
+
+.workspace-layout .ant-card-head-title {
+  color: var(--text-primary);
+}
+
+.workspace-layout .ant-statistic-title {
+  color: var(--text-muted);
+}
+
+.workspace-layout .ant-statistic-content {
+  color: var(--text-primary);
+}
+
+@media (max-width: 960px) {
+  .workspace-header {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 12px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .workspace-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .workspace-section__header,
+  .workspace-online-card__head,
+  .workspace-online-card__progress-head,
+  .workspace-online-card__progress-foot {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .workspace-toolbar__search {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .workspace-header__subtitle {
+    display: none;
+  }
+
+  .workspace-project-grid,
+  .workspace-online-grid,
+  .workspace-online-card__progress-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-online-card__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+html[data-theme="dark"] .workspace-layout .summary-card {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel-bg) 92%, #0f172a 8%),
+    var(--panel-bg)
+  );
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .workspace-layout .workspace-header {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--dashboard-header-bg) 92%, #0f172a 8%),
+      color-mix(in srgb, var(--dashboard-header-bg) 94%, #172554 6%)
+    );
+}
+
+html[data-theme="dark"] .workspace-layout .workspace-online-card {
+  border-color: rgba(96, 165, 250, 0.16);
+  background:
+    radial-gradient(circle at top right, rgba(30, 64, 175, 0.28), transparent 36%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel-bg) 88%, #172554 12%),
+      var(--panel-bg)
+    );
+}
+
+html[data-theme="dark"] .workspace-layout .workspace-online-card__timestamp {
+  background: rgba(37, 99, 235, 0.16);
+  color: #bfdbfe;
+}
+
+html[data-theme="dark"] .workspace-layout .workspace-online-card__stat {
+  background: rgba(15, 23, 42, 0.58);
+  border-color: rgba(96, 165, 250, 0.14);
+}
+
+html[data-theme="dark"] .workspace-layout .workspace-online-card__progress-block {
+  border-color: rgba(100, 116, 139, 0.24);
+  background: rgba(15, 23, 42, 0.72);
+}
+
+html[data-theme="dark"] .workspace-layout .workspace-online-card__progress-block.is-translate {
+  background: linear-gradient(180deg, rgba(120, 53, 15, 0.34), rgba(30, 41, 59, 0.76));
+}
+
+html[data-theme="dark"] .workspace-layout .workspace-online-card__progress-block.is-proofread {
+  background: linear-gradient(180deg, rgba(20, 83, 45, 0.34), rgba(30, 41, 59, 0.76));
+}
+
+html[data-theme="dark"] .workspace-layout .workspace-header__title {
+  color: var(--text-primary);
+}

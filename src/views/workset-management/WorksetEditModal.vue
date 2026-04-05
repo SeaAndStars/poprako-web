@@ -12,7 +12,7 @@
   >
     <a-alert
       message="更新项目资料"
-      description="你可以在这里更新项目名称、简介、默认岗位和封面。保存后详情页与列表页会自动刷新。"
+      description="你可以在这里更新项目名称、简介、作者、状态、默认岗位和封面。保存后详情页与列表页会自动刷新。"
       type="info"
       show-icon
       style="margin-bottom: 24px"
@@ -30,6 +30,28 @@
           placeholder="补充一下项目简介、连载说明或协作约定..."
         />
       </a-form-item>
+
+      <a-row :gutter="16">
+        <a-col :span="12">
+          <a-form-item label="作者 (可选)">
+            <a-input
+              v-model:value="form.author"
+              placeholder="例如：尾田荣一郎"
+            />
+          </a-form-item>
+        </a-col>
+
+        <a-col :span="12">
+          <a-form-item label="状态 (可选)">
+            <a-select
+              v-model:value="form.status"
+              allow-clear
+              placeholder="选择项目状态"
+              :options="WORKSET_STATUS_OPTIONS"
+            />
+          </a-form-item>
+        </a-col>
+      </a-row>
 
       <a-form-item label="项目封面 (可选)">
         <div class="workset-edit-modal__cover-preview">
@@ -78,17 +100,12 @@
             <a-select
               v-model:value="form.translator_user_id"
               allow-clear
+              show-search
+              option-filter-prop="label"
               :loading="loadingMembers"
               placeholder="空缺 (缺省)"
-            >
-              <a-select-option
-                v-for="member in translatorMembers"
-                :key="member.user_id"
-                :value="member.user_id"
-              >
-                {{ member.user?.name || member.user_id }}
-              </a-select-option>
-            </a-select>
+              :options="translatorMemberOptions"
+            />
           </a-form-item>
         </a-col>
 
@@ -97,17 +114,12 @@
             <a-select
               v-model:value="form.proofreader_user_id"
               allow-clear
+              show-search
+              option-filter-prop="label"
               :loading="loadingMembers"
               placeholder="空缺 (缺省)"
-            >
-              <a-select-option
-                v-for="member in proofreaderMembers"
-                :key="member.user_id"
-                :value="member.user_id"
-              >
-                {{ member.user?.name || member.user_id }}
-              </a-select-option>
-            </a-select>
+              :options="proofreaderMemberOptions"
+            />
           </a-form-item>
         </a-col>
 
@@ -116,17 +128,12 @@
             <a-select
               v-model:value="form.typesetter_user_id"
               allow-clear
+              show-search
+              option-filter-prop="label"
               :loading="loadingMembers"
               placeholder="空缺 (缺省)"
-            >
-              <a-select-option
-                v-for="member in typesetterMembers"
-                :key="member.user_id"
-                :value="member.user_id"
-              >
-                {{ member.user?.name || member.user_id }}
-              </a-select-option>
-            </a-select>
+              :options="typesetterMemberOptions"
+            />
           </a-form-item>
         </a-col>
 
@@ -135,17 +142,12 @@
             <a-select
               v-model:value="form.reviewer_user_id"
               allow-clear
+              show-search
+              option-filter-prop="label"
               :loading="loadingMembers"
               placeholder="空缺 (缺省)"
-            >
-              <a-select-option
-                v-for="member in reviewerMembers"
-                :key="member.user_id"
-                :value="member.user_id"
-              >
-                {{ member.user?.name || member.user_id }}
-              </a-select-option>
-            </a-select>
+              :options="reviewerMemberOptions"
+            />
           </a-form-item>
         </a-col>
       </a-row>
@@ -170,7 +172,9 @@ import {
   resolveImageFileExtension,
   uploadFileToPresignedPutUrl,
 } from "../../api/objectStorage";
+import { useBlobAssetUrlCache } from "../../composables/useBlobAssetUrlCache";
 import type { MemberInfo, WorksetInfo } from "../../types/domain";
+import { WORKSET_STATUS_OPTIONS } from "./worksetStatus";
 
 interface Props {
   open: boolean;
@@ -180,6 +184,8 @@ interface Props {
 interface WorksetEditForm {
   name: string;
   description: string;
+  author: string;
+  status?: string;
   translator_user_id?: string;
   proofreader_user_id?: string;
   typesetter_user_id?: string;
@@ -205,10 +211,13 @@ const submitting = ref(false);
 const coverFile = ref<File | null>(null);
 const coverFileList = ref<UploadFile[]>([]);
 const coverObjectUrl = ref<string | undefined>(undefined);
+const { resolveDisplayAssetUrl } = useBlobAssetUrlCache();
 
 const form = reactive<WorksetEditForm>({
   name: "",
   description: "",
+  author: "",
+  status: undefined,
   translator_user_id: undefined,
   proofreader_user_id: undefined,
   typesetter_user_id: undefined,
@@ -227,6 +236,18 @@ const typesetterMembers = computed(() =>
 const reviewerMembers = computed(() =>
   getMembersByRole("assigned_reviewer_at"),
 );
+const translatorMemberOptions = computed(() =>
+  buildMemberOptions(translatorMembers.value),
+);
+const proofreaderMemberOptions = computed(() =>
+  buildMemberOptions(proofreaderMembers.value),
+);
+const typesetterMemberOptions = computed(() =>
+  buildMemberOptions(typesetterMembers.value),
+);
+const reviewerMemberOptions = computed(() =>
+  buildMemberOptions(reviewerMembers.value),
+);
 const currentCoverUrl = computed(() =>
   appendCacheBustQueryToUrl(
     props.workset?.cover_url,
@@ -234,7 +255,11 @@ const currentCoverUrl = computed(() =>
   ),
 );
 const coverPreviewUrl = computed(
-  () => coverObjectUrl.value || currentCoverUrl.value,
+  () =>
+    coverObjectUrl.value ||
+    resolveDisplayAssetUrl(currentCoverUrl.value, {
+      fallbackToRawUrl: true,
+    }),
 );
 const coverPreviewLabel = computed(() => {
   if (coverFile.value) {
@@ -287,9 +312,24 @@ function getMembersByRole(roleKey: RoleKey): MemberInfo[] {
   return teamMembers.value.filter((member) => Boolean(member[roleKey]));
 }
 
+function buildMemberOptionLabel(member: MemberInfo): string {
+  const displayName = member.user?.name?.trim() || member.user_id;
+  const qq = member.user?.qq?.trim();
+  return qq ? `${displayName} · QQ ${qq}` : displayName;
+}
+
+function buildMemberOptions(members: MemberInfo[]) {
+  return members.map((member) => ({
+    label: buildMemberOptionLabel(member),
+    value: member.user_id,
+  }));
+}
+
 function syncFormWithWorkset(): void {
   form.name = props.workset?.name || "";
   form.description = props.workset?.description || "";
+  form.author = props.workset?.author || "";
+  form.status = props.workset?.status || undefined;
   form.translator_user_id = props.workset?.translator_user_id;
   form.proofreader_user_id = props.workset?.proofreader_user_id;
   form.typesetter_user_id = props.workset?.typesetter_user_id;
@@ -382,6 +422,8 @@ async function handleSubmit(): Promise<void> {
     await updateWorkset(props.workset.id, {
       name: form.name.trim(),
       description: form.description.trim() || undefined,
+      author: form.author.trim() || undefined,
+      status: form.status,
       translator_user_id: form.translator_user_id,
       proofreader_user_id: form.proofreader_user_id,
       typesetter_user_id: form.typesetter_user_id,

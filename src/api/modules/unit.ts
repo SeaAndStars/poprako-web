@@ -18,17 +18,6 @@ export interface UnitListQuery {
 export type GetUnitListRequest = UnitListQuery;
 
 /**
- * Swagger 的 util.Option-bool 占位类型。
- * 后端采用自定义 Option 结构表示“是否传入某字段”，前端按对象透传。
- */
-export type SwaggerOptionBool = Record<string, unknown>;
-
-/**
- * Swagger 的 util.Option-string 占位类型。
- */
-export type SwaggerOptionString = Record<string, unknown>;
-
-/**
  * Unit 新增项，对应 swagger 的 value.UnitCreation。
  */
 export interface UnitCreation {
@@ -52,19 +41,19 @@ export interface UnitCreation {
  */
 export interface UnitPatch {
   id: string;
-  page_id?: string;
+  page_id?: string | null;
   index?: number;
   x_coord?: number;
   y_coord?: number;
   is_bubble?: boolean;
 
-  is_proofread?: SwaggerOptionBool;
-  translated_text?: SwaggerOptionString;
-  proofread_text?: SwaggerOptionString;
-  translator_comment?: SwaggerOptionString;
-  proofreader_comment?: SwaggerOptionString;
-  translator_id?: SwaggerOptionString;
-  proofreader_id?: SwaggerOptionString;
+  is_proofread?: boolean;
+  translated_text?: string | null;
+  proofread_text?: string | null;
+  translator_comment?: string | null;
+  proofreader_comment?: string | null;
+  translator_id?: string | null;
+  proofreader_id?: string | null;
 }
 
 /**

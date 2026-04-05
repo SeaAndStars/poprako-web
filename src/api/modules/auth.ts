@@ -2,6 +2,7 @@
  * 文件用途：封装认证与当前用户信息相关接口。
  */
 import { httpClient } from "../http";
+import type { PaginationQuery } from "../../types/common";
 import type { UserInfo } from "../../types/domain";
 
 /**
@@ -80,6 +81,24 @@ export type GetCurrentUserProfileResponse = UserInfo;
  * 获取指定用户信息响应类型。
  */
 export type GetUserProfileByIDResponse = UserInfo;
+
+/**
+ * 用户列表查询参数。
+ */
+export interface UserListQuery extends PaginationQuery {
+  /** 按用户名或 QQ 模糊搜索。 */
+  search?: string;
+}
+
+/**
+ * 获取用户列表请求类型。
+ */
+export type GetUserListRequest = UserListQuery;
+
+/**
+ * 获取用户列表响应类型。
+ */
+export type GetUserListResponse = UserInfo[];
 
 /**
  * 更新用户参数，对应 swagger 的 value.UpdateUserArgs。
@@ -184,6 +203,25 @@ export async function getUserProfileByID(
   userID: string,
 ): Promise<GetUserProfileByIDResponse> {
   return httpClient.get<GetUserProfileByIDResponse>(`/users/${userID}`);
+}
+
+/**
+ * 调用 swagger 的 GET /users。
+ * 请求类型：GetUserListRequest。
+ * 返回类型：GetUserListResponse。
+ */
+export async function getUserList(
+  userListQuery: GetUserListRequest = {
+    offset: 0,
+    limit: 20,
+  },
+): Promise<GetUserListResponse> {
+  const userList = await httpClient.get<GetUserListResponse>(
+    "/users",
+    userListQuery,
+  );
+
+  return Array.isArray(userList) ? userList : [];
 }
 
 /**

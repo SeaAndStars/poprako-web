@@ -154,6 +154,26 @@
                 />
               </a-form-item>
 
+              <a-form-item
+                label="头像"
+                required
+                :validate-status="registerAvatarValidationStatus"
+                :help="registerAvatarValidationMessage"
+              >
+                <AvatarCropUpload
+                  :placeholder-text="registerAvatarPlaceholder"
+                  preview-alt-text="Register Avatar Preview"
+                  select-button-text="选择并裁切头像"
+                  reselect-button-text="重新选择并裁切头像"
+                  hint-text="通过邀请码注册必须上传头像，注册成功后会自动完成头像直传。"
+                  crop-modal-title="裁切注册头像"
+                  crop-hint-text="裁切框固定为 1:1，请让主体尽量落在圆形区域中。"
+                  :reset-token="registerAvatarResetToken"
+                  :disabled="registerSubmitting"
+                  @file-change="handleRegisterAvatarFileChange"
+                />
+              </a-form-item>
+
               <a-form-item>
                 <a-button
                   type="primary"
@@ -180,12 +200,14 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { message } from "ant-design-vue";
+import AvatarCropUpload from "../components/AvatarCropUpload.vue";
 import {
   loginUser,
   registerUser,
   type LoginUserArgs,
   type RegisterUserArgs,
 } from "../api/modules";
+import { uploadUserAvatar } from "../api/userAvatarUpload";
 import { useAuthStore } from "../stores/auth";
 
 type AuthMode = "login" | "register";
@@ -195,6 +217,9 @@ const router = useRouter();
 const authStore = useAuthStore();
 const loginSubmitting = ref(false);
 const registerSubmitting = ref(false);
+const registerAvatarFile = ref<File | null>(null);
+const registerAvatarTouched = ref(false);
+const registerAvatarResetToken = ref(0);
 const isDevelopmentMode = import.meta.env.DEV;
 const DEVELOPMENT_PREVIEW_SESSION_KEY = "poprako_dev_preview_mode";
 const LOGIN_NO_SCROLL_CLASS_NAME = "login-no-scroll";
@@ -220,6 +245,20 @@ const authMode = computed<AuthMode>(() => {
 });
 
 const isRegisterMode = computed(() => authMode.value === "register");
+const registerAvatarPlaceholder = computed(() => {
+  const preferredText = registerForm.name.trim() || registerForm.qq.trim();
+  return (preferredText.charAt(0) || "U").toUpperCase();
+});
+const registerAvatarValidationStatus = computed(() => {
+  return registerAvatarTouched.value && !registerAvatarFile.value
+    ? "error"
+    : undefined;
+});
+const registerAvatarValidationMessage = computed(() => {
+  return registerAvatarTouched.value && !registerAvatarFile.value
+    ? "通过邀请码注册必须上传头像"
+    : undefined;
+});
 
 /**
  * 设置开发模式直达开关。
@@ -245,7 +284,28 @@ function switchAuthMode(nextMode: AuthMode): void {
     return;
   }
 
+  if (nextMode !== "register") {
+    resetRegisterAvatarSelection();
+  }
+
   void router.push(nextMode === "register" ? "/register" : "/login");
+}
+
+/**
+ * 重置注册页头像选择状态。
+ */
+function resetRegisterAvatarSelection(): void {
+  registerAvatarFile.value = null;
+  registerAvatarTouched.value = false;
+  registerAvatarResetToken.value += 1;
+}
+
+/**
+ * 接收注册页头像裁切组件回传的文件。
+ */
+function handleRegisterAvatarFileChange(nextAvatarFile: File | null): void {
+  registerAvatarTouched.value = true;
+  registerAvatarFile.value = nextAvatarFile;
 }
 
 /**
@@ -272,6 +332,13 @@ async function handleLoginSubmit(): Promise<void> {
  * 处理注册提交。
  */
 async function handleRegisterSubmit(): Promise<void> {
+  const selectedRegisterAvatarFile = registerAvatarFile.value;
+  if (!selectedRegisterAvatarFile) {
+    registerAvatarTouched.value = true;
+    message.warning("通过邀请码注册必须上传头像");
+    return;
+  }
+
   registerSubmitting.value = true;
 
   try {
@@ -283,7 +350,23 @@ async function handleRegisterSubmit(): Promise<void> {
     });
 
     authStore.setAccessToken(registerUserResult.access_token);
+
+    try {
+      await uploadUserAvatar(
+        registerUserResult.user_id,
+        selectedRegisterAvatarFile,
+      );
+    } catch {
+      setDevelopmentPreviewModeEnabled(false);
+      void authStore.refreshCurrentUserProfile().catch(() => null);
+      message.warning("注册已完成，但头像还没有上传成功，请先补齐头像后继续");
+      await router.push("/workspace");
+      return;
+    }
+
     setDevelopmentPreviewModeEnabled(false);
+    resetRegisterAvatarSelection();
+    void authStore.refreshCurrentUserProfile().catch(() => null);
     message.success("注册成功，正在进入工作区");
     await router.push("/workspace");
   } catch (error) {
@@ -536,6 +619,13 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+.auth-page.is-register-mode .auth-shell__panel-body {
+  height: auto;
+  max-height: min(720px, calc(100vh - 160px));
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .auth-shell__panel-header {
   display: flex;
   flex-direction: column;
@@ -670,6 +760,12 @@ onBeforeUnmount(() => {
   .auth-shell__panel-header,
   .auth-form {
     width: 100%;
+  }
+
+  .auth-page.is-register-mode .auth-shell__panel-body {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
   }
 }
 

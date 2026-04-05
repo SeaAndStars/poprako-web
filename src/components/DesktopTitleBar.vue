@@ -64,8 +64,21 @@
                 <div class="titlebar-profile-menu__name">
                   {{ titleBarProfile?.nickname }}
                 </div>
-                <div class="titlebar-profile-menu__status">
-                  {{ titleBarProfile?.status }}
+                <div class="titlebar-profile-menu__facts">
+                  <div class="titlebar-profile-menu__fact">
+                    <span class="titlebar-profile-menu__fact-label">QQ</span>
+                    <span class="titlebar-profile-menu__fact-value">
+                      {{ titleBarProfile?.qq || "-" }}
+                    </span>
+                  </div>
+                  <div class="titlebar-profile-menu__fact">
+                    <span class="titlebar-profile-menu__fact-label">UID</span>
+                    <span
+                      class="titlebar-profile-menu__fact-value titlebar-profile-menu__fact-value--mono"
+                    >
+                      {{ titleBarProfile?.id }}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -174,21 +187,32 @@
 
   <a-modal
     v-model:open="isProfileModalOpen"
-    title="编辑头像与资料"
-    ok-text="保存资料"
+    :title="profileModalTitle"
+    :ok-text="profileModalOkText"
     cancel-text="取消"
     :confirm-loading="profileSubmitting"
+    :mask-closable="!isAvatarCompletionRequired"
+    :closable="!isAvatarCompletionRequired"
+    :keyboard="!isAvatarCompletionRequired"
+    :cancel-button-props="profileModalCancelButtonProps"
     @ok="handleProfileSave"
     @cancel="handleProfileModalCancel"
   >
     <div class="titlebar-profile-modal">
+      <p
+        v-if="isAvatarCompletionRequired"
+        class="titlebar-profile-modal__hint titlebar-profile-modal__hint--warning"
+      >
+        当前账号还没有头像。继续使用前必须先上传头像并保存。
+      </p>
+
       <AvatarCropUpload
         :preview-url="titleBarProfile?.avatarUrl"
         :placeholder-text="profileInitial"
         preview-alt-text="Profile Avatar Preview"
         select-button-text="选择并裁切头像"
         reselect-button-text="重新选择并裁切头像"
-        hint-text="支持常见图片格式。选图后会先进入 1:1 裁切，再通过预签名地址直传到对象存储。"
+        :hint-text="profileAvatarHintText"
         crop-modal-title="裁切头像"
         crop-hint-text="裁切框固定为 1:1，并使用圆形预览遮罩模拟最终头像效果。保存后会立即刷新，不再继续显示旧缓存。"
         :reset-token="profileAvatarResetToken"
@@ -219,8 +243,7 @@
       </a-form>
 
       <p class="titlebar-profile-modal__hint">
-        当前后端资料更新接口是完整更新语义。只修改头像时可以不填密码；修改昵称或
-        QQ 时，需要把当前登录密码一并提交。
+        {{ profileModalHintText }}
       </p>
     </div>
   </a-modal>
@@ -257,7 +280,7 @@
       </a-form>
 
       <p class="titlebar-profile-modal__hint">
-        当前版本将基于已登录状态直接更新密码，并沿用现有昵称与 QQ 信息一同提交。
+        当前版本会在已登录状态下直接提交新密码，其他资料字段保持不变。
       </p>
     </div>
   </a-modal>
@@ -284,19 +307,12 @@ import {
 } from "@ant-design/icons-vue";
 import { useRoute, useRouter } from "vue-router";
 import AvatarCropUpload from "./AvatarCropUpload.vue";
-import {
-  confirmUserAvatarUploaded,
-  getCurrentUserProfile,
-  reserveUserAvatar,
-  updateUserProfile,
-} from "../api/modules";
-import {
-  appendCacheBustQueryToUrl,
-  resolveImageFileExtension,
-  uploadFileToPresignedPutUrl,
-} from "../api/objectStorage";
+import { getCurrentUserProfile, updateUserProfile } from "../api/modules";
+import { appendCacheBustQueryToUrl } from "../api/objectStorage";
+import { useBlobAssetUrlCache } from "../composables/useBlobAssetUrlCache";
 import type { UserInfo } from "../types/domain";
 import { useAuthStore } from "../stores/auth";
+import { uploadUserAvatar } from "../api/userAvatarUpload";
 import poprakoLogoURL from "../assets/poprako-logo.svg";
 
 interface TitleBarProfile {
@@ -319,6 +335,7 @@ interface PasswordEditFormState {
 }
 
 const DEVELOPMENT_PREVIEW_PROFILE_ID = "dev-preview";
+const USER_PROFILE_UPDATED_EVENT = "poprako:user-profile-updated";
 
 const desktopBridge = window.poprakoDesktop;
 const windowControls = desktopBridge?.windowControls;
@@ -338,6 +355,13 @@ const canManageProfile = computed(
     authStore.isLoggedIn &&
     titleBarProfile.value?.id !== DEVELOPMENT_PREVIEW_PROFILE_ID,
 );
+const isAvatarCompletionRequired = computed(() => {
+  return Boolean(
+    !isAuthRoute.value &&
+    canManageProfile.value &&
+    currentUserProfile.value?.is_avatar_uploaded === false,
+  );
+});
 const isMaximized = ref(false);
 const isProfileMenuOpen = ref(false);
 const isProfileModalOpen = ref(false);
@@ -350,6 +374,7 @@ const selectedAvatarFile = ref<File | null>(null);
 const avatarCacheBustToken = ref<number>(0);
 const profileAvatarResetToken = ref(0);
 const hasTitleBarAvatarLoadError = ref(false);
+const { resolveDisplayAssetUrl } = useBlobAssetUrlCache();
 
 const profileForm = reactive<ProfileEditFormState>({
   name: "",
@@ -378,10 +403,45 @@ const displayTitleBarAvatarUrl = computed(() => {
     return undefined;
   }
 
-  return titleBarProfile.value?.avatarUrl;
+  return resolveDisplayAssetUrl(titleBarProfile.value?.avatarUrl, {
+    fallbackToRawUrl: true,
+  });
+});
+const profileModalTitle = computed(() => {
+  return isAvatarCompletionRequired.value ? "上传头像后继续" : "编辑头像与资料";
+});
+const profileModalOkText = computed(() => {
+  return isAvatarCompletionRequired.value ? "保存头像并继续" : "保存资料";
+});
+const profileModalCancelButtonProps = computed(() => {
+  return isAvatarCompletionRequired.value
+    ? {
+        style: {
+          display: "none",
+        },
+      }
+    : undefined;
+});
+const profileAvatarHintText = computed(() => {
+  return isAvatarCompletionRequired.value
+    ? "当前账号缺少头像，必须先上传并保存后才能继续使用。"
+    : "支持常见图片格式。选图后会先进入 1:1 裁切，再通过预签名地址直传到对象存储。";
+});
+const profileModalHintText = computed(() => {
+  return isAvatarCompletionRequired.value
+    ? "当前账号还没有头像。请先完成头像上传；如果同时修改昵称或 QQ，仍需填写当前密码。"
+    : "只修改头像时可以不填密码；修改昵称或 QQ 时，仍需填写当前密码作为确认。";
 });
 
 let cleanupMaximizeListener: (() => void) | undefined;
+
+async function handleExternalUserProfileUpdated(): Promise<void> {
+  await syncTitleBarProfile();
+}
+
+function notifyUserProfileUpdated(): void {
+  window.dispatchEvent(new CustomEvent(USER_PROFILE_UPDATED_EVENT));
+}
 
 /**
  * 释放当前选择头像生成的本地预览地址。
@@ -459,6 +519,7 @@ async function syncTitleBarProfile(): Promise<void> {
     avatarCacheBustToken.value = 0;
     currentUserProfile.value = null;
     titleBarProfile.value = null;
+    authStore.clearCurrentUserProfile();
     return;
   }
 
@@ -468,6 +529,7 @@ async function syncTitleBarProfile(): Promise<void> {
     titleBarProfile.value = {
       ...developmentPreviewProfile,
     };
+    authStore.clearCurrentUserProfile();
     return;
   }
 
@@ -475,12 +537,14 @@ async function syncTitleBarProfile(): Promise<void> {
     avatarCacheBustToken.value = 0;
     currentUserProfile.value = null;
     titleBarProfile.value = null;
+    authStore.clearCurrentUserProfile();
     return;
   }
 
   try {
     const nextCurrentUserProfile = await getCurrentUserProfile();
     currentUserProfile.value = nextCurrentUserProfile;
+    authStore.setCurrentUserProfile(nextCurrentUserProfile);
     titleBarProfile.value = {
       id: nextCurrentUserProfile.id,
       nickname:
@@ -502,6 +566,7 @@ async function syncTitleBarProfile(): Promise<void> {
     }
   } catch {
     currentUserProfile.value = null;
+    authStore.clearCurrentUserProfile();
     titleBarProfile.value = import.meta.env.DEV
       ? {
           ...developmentPreviewProfile,
@@ -552,6 +617,12 @@ async function openProfileEditModal(): Promise<void> {
  * 打开密码修改弹层。
  */
 async function openPasswordModal(): Promise<void> {
+  if (isAvatarCompletionRequired.value) {
+    message.warning("请先上传头像后再继续其他资料操作");
+    await openProfileEditModal();
+    return;
+  }
+
   isProfileMenuOpen.value = false;
   await syncTitleBarProfile();
   resetPasswordForm();
@@ -576,6 +647,11 @@ async function handleProfileSave(): Promise<void> {
     normalizedName !== editableUserSnapshot.name ||
     normalizedQq !== editableUserSnapshot.qq;
   const hasAvatarChanges = selectedAvatarFile.value !== null;
+
+  if (isAvatarCompletionRequired.value && !selectedAvatarFile.value) {
+    message.warning("当前账号必须先上传头像");
+    return;
+  }
 
   if (!hasTextChanges && !hasAvatarChanges) {
     message.info("当前没有需要保存的资料变更");
@@ -614,29 +690,17 @@ async function handleProfileSave(): Promise<void> {
     }
 
     if (selectedAvatarFile.value) {
-      const avatarContentType =
-        selectedAvatarFile.value.type || "application/octet-stream";
-      const avatarExtension = resolveImageFileExtension(
-        selectedAvatarFile.value,
-      );
-      const reserveUserAvatarResult = await reserveUserAvatar(
+      await uploadUserAvatar(
         editableUserSnapshot.userID,
-        {
-          extension: avatarExtension,
-          content_type: avatarContentType,
-        },
-      );
-
-      await uploadFileToPresignedPutUrl(
-        reserveUserAvatarResult.put_url,
         selectedAvatarFile.value,
-        avatarContentType,
       );
-      await confirmUserAvatarUploaded(editableUserSnapshot.userID);
       avatarCacheBustToken.value = Date.now();
     }
 
     await syncTitleBarProfile();
+    if (hasTextChanges || hasAvatarChanges) {
+      notifyUserProfileUpdated();
+    }
     resetProfileAvatarSelection();
     isProfileModalOpen.value = false;
     message.success("个人资料已更新");
@@ -698,6 +762,11 @@ async function handlePasswordSave(): Promise<void> {
  * 关闭资料弹层时清理临时状态。
  */
 function handleProfileModalCancel(): void {
+  if (isAvatarCompletionRequired.value) {
+    message.warning("请先上传头像并保存后继续");
+    return;
+  }
+
   isProfileModalOpen.value = false;
   resetProfileAvatarSelection();
   syncProfileEditForm();
@@ -750,6 +819,11 @@ function handleClose(): void {
 }
 
 onMounted(async () => {
+  window.addEventListener(
+    USER_PROFILE_UPDATED_EVENT,
+    handleExternalUserProfileUpdated,
+  );
+
   if (!windowControls) {
     await syncTitleBarProfile();
     return;
@@ -780,13 +854,43 @@ watch(
 );
 
 watch(
-  () => titleBarProfile.value?.avatarUrl,
+  () => isAvatarCompletionRequired.value,
+  (isRequired, wasRequired) => {
+    if (!isRequired) {
+      return;
+    }
+
+    isProfileMenuOpen.value = false;
+    isPasswordModalOpen.value = false;
+
+    if (!isProfileModalOpen.value) {
+      resetProfileAvatarSelection();
+    }
+
+    syncProfileEditForm();
+    isProfileModalOpen.value = true;
+
+    if (!wasRequired) {
+      message.warning("当前账号还没有头像，请先上传头像后继续");
+    }
+  },
+  {
+    immediate: true,
+  },
+);
+
+watch(
+  () => displayTitleBarAvatarUrl.value,
   () => {
     hasTitleBarAvatarLoadError.value = false;
   },
 );
 
 onBeforeUnmount(() => {
+  window.removeEventListener(
+    USER_PROFILE_UPDATED_EVENT,
+    handleExternalUserProfileUpdated,
+  );
   cleanupMaximizeListener?.();
   clearSelectedAvatarFile();
 });
@@ -961,6 +1065,11 @@ onBeforeUnmount(() => {
   line-height: 1.6;
 }
 
+.titlebar-profile-modal__hint--warning {
+  color: #c66a15;
+  font-weight: 600;
+}
+
 :global(.titlebar-profile-dropdown .ant-dropdown-menu) {
   display: none;
 }
@@ -974,7 +1083,7 @@ onBeforeUnmount(() => {
 }
 
 :global(.titlebar-profile-menu) {
-  width: 248px;
+  width: min(340px, calc(100vw - 24px));
   border-radius: 14px;
   border: 1px solid var(--panel-border);
   background: var(--float-bg);
@@ -985,7 +1094,7 @@ onBeforeUnmount(() => {
 
 :global(.titlebar-profile-menu__summary) {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 4px 4px 8px;
 }
@@ -1009,26 +1118,50 @@ onBeforeUnmount(() => {
 
 :global(.titlebar-profile-menu__meta) {
   min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
 }
 
 :global(.titlebar-profile-menu__name) {
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.35;
 }
 
-:global(.titlebar-profile-menu__status) {
+:global(.titlebar-profile-menu__facts) {
+  display: grid;
+  gap: 4px;
+}
+
+:global(.titlebar-profile-menu__fact) {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 8px;
+}
+
+:global(.titlebar-profile-menu__fact-label) {
   color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+:global(.titlebar-profile-menu__fact-value) {
+  min-width: 0;
+  color: var(--text-secondary);
   font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.45;
+}
+
+:global(.titlebar-profile-menu__fact-value--mono) {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }
 
 :global(.titlebar-profile-menu__divider) {

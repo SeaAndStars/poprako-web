@@ -19,17 +19,21 @@ import {
 } from "../local-project/types";
 import { useAuthStore } from "./auth";
 
+
 export interface TranslatorCollaboratorIdentity {
   user_id: string;
   display_name: string;
   avatar_url?: string;
 }
 
+export type TranslatorPageEditorPresenceState = "viewing" | "lock_holder";
+
 export interface TranslatorPageEditorState extends TranslatorCollaboratorIdentity {
   page_key: string;
   page_index: number;
   page_name: string;
   mode: TranslatorMode;
+  editor_state: TranslatorPageEditorPresenceState;
   acquired_at: number;
 }
 
@@ -54,21 +58,36 @@ interface JoinProjectArgs extends TranslatorCollaboratorIdentity {
   project_key: string;
 }
 
+
 interface OpenPageArgs {
   project_key: string;
   page_key: string;
   page_index: number;
   page_name: string;
+  mode: TranslatorMode;
   units: LocalProjectUnit[];
 }
 
-interface PendingSnapshotArgs extends OpenPageArgs {
-  mode: TranslatorMode;
-}
+type PendingSnapshotArgs = OpenPageArgs;
 
 interface TryAcquirePageLockResult {
   acquired: boolean;
   editor?: TranslatorPageEditorState;
+}
+
+function isSameCollaboratorProfile(
+  leftProfile: TranslatorCollaboratorIdentity | null,
+  rightProfile: TranslatorCollaboratorIdentity,
+): boolean {
+  if (!leftProfile) {
+    return false;
+  }
+
+  return (
+    leftProfile.user_id === rightProfile.user_id &&
+    leftProfile.display_name === rightProfile.display_name &&
+    leftProfile.avatar_url === rightProfile.avatar_url
+  );
 }
 
 function resolveHubURL(): string {
@@ -100,6 +119,40 @@ function normalizeMode(rawMode: string | undefined): TranslatorMode {
   return rawMode === "proofread" ? "proofread" : "translate";
 }
 
+
+function normalizeEditorState(
+  rawState: string | undefined,
+): TranslatorPageEditorPresenceState {
+  return rawState === "lock_holder" ? "lock_holder" : "viewing";
+}
+
+function sortProjectEditors(
+  pageEditors: TranslatorPageEditorState[],
+): TranslatorPageEditorState[] {
+  return [...pageEditors].sort((leftEditor, rightEditor) => {
+    if (leftEditor.page_index !== rightEditor.page_index) {
+      return leftEditor.page_index - rightEditor.page_index;
+    }
+
+    if (leftEditor.editor_state !== rightEditor.editor_state) {
+      return leftEditor.editor_state === "lock_holder" ? -1 : 1;
+    }
+
+    if (leftEditor.acquired_at !== rightEditor.acquired_at) {
+      return rightEditor.acquired_at - leftEditor.acquired_at;
+    }
+
+    const userCompare = leftEditor.user_id.localeCompare(
+      rightEditor.user_id,
+    );
+    if (userCompare !== 0) {
+      return userCompare;
+    }
+
+    return leftEditor.page_key.localeCompare(rightEditor.page_key);
+  });
+}
+
 function normalizeEditor(
   rawEditor: TranslatorPageEditorState,
 ): TranslatorPageEditorState {
@@ -108,6 +161,10 @@ function normalizeEditor(
     display_name: rawEditor.display_name?.trim() || "协作成员",
     avatar_url: rawEditor.avatar_url?.trim() || undefined,
     mode: normalizeMode(rawEditor.mode),
+    editor_state: normalizeEditorState(rawEditor.editor_state),
+    acquired_at: Number.isFinite(rawEditor.acquired_at)
+      ? rawEditor.acquired_at
+      : Date.now(),
   };
 }
 
@@ -121,9 +178,11 @@ function normalizeProjectState(
   return {
     project_key: rawState.project_key,
     page_editors: Array.isArray(rawState.page_editors)
-      ? rawState.page_editors
-          .map((rawEditor) => normalizeEditor(rawEditor))
-          .sort((left, right) => left.page_index - right.page_index)
+      ? sortProjectEditors(
+          rawState.page_editors.map((rawEditor) =>
+            normalizeEditor(rawEditor),
+          ),
+        )
       : [],
   };
 }
@@ -144,28 +203,71 @@ function normalizeSnapshot(
   };
 }
 
-function upsertProjectEditor(
+
+function buildSessionPageEditor(args: {
+  sessionProfile: TranslatorCollaboratorIdentity;
+  pageKey: string;
+  pageIndex: number;
+  pageName: string;
+  mode: TranslatorMode;
+  editorState: TranslatorPageEditorPresenceState;
+  acquiredAt?: number;
+}): TranslatorPageEditorState {
+  return normalizeEditor({
+    user_id: args.sessionProfile.user_id,
+    display_name: args.sessionProfile.display_name,
+    avatar_url: args.sessionProfile.avatar_url,
+    page_key: args.pageKey,
+    page_index: args.pageIndex,
+    page_name: args.pageName,
+    mode: args.mode,
+    editor_state: args.editorState,
+    acquired_at: args.acquiredAt ?? Date.now(),
+  });
+}
+
+function replaceSessionProjectEditors(
   currentState: TranslatorProjectState | null,
-  editor: TranslatorPageEditorState | undefined,
+  sessionUserId: string,
+  nextEditors: TranslatorPageEditorState[],
   fallbackProjectKey: string,
 ): TranslatorProjectState {
-  const normalizedEditor = editor ? normalizeEditor(editor) : undefined;
-  const existingEditors = currentState?.page_editors ?? [];
-  const filteredEditors = normalizedEditor
-    ? existingEditors.filter(
-        (currentEditor) => currentEditor.page_key !== normalizedEditor.page_key,
-      )
-    : existingEditors;
+  const remainingEditors = (currentState?.page_editors ?? []).filter(
+    (pageEditor) => pageEditor.user_id !== sessionUserId,
+  );
 
   return (
     normalizeProjectState({
       project_key: currentState?.project_key || fallbackProjectKey,
-      page_editors: normalizedEditor
-        ? [...filteredEditors, normalizedEditor]
-        : filteredEditors,
+      page_editors: [...remainingEditors, ...nextEditors],
     }) ?? {
       project_key: fallbackProjectKey,
-      page_editors: normalizedEditor ? [normalizedEditor] : [],
+      page_editors: sortProjectEditors(nextEditors),
+    }
+  );
+}
+
+function replacePageLockHolder(
+  currentState: TranslatorProjectState | null,
+  pageKey: string,
+  nextLockHolder: TranslatorPageEditorState | undefined,
+  fallbackProjectKey: string,
+): TranslatorProjectState {
+  const remainingEditors = (currentState?.page_editors ?? []).filter(
+    (pageEditor) =>
+      pageEditor.page_key !== pageKey ||
+      pageEditor.editor_state !== "lock_holder",
+  );
+
+  return (
+    normalizeProjectState({
+      project_key: currentState?.project_key || fallbackProjectKey,
+      page_editors: nextLockHolder
+        ? [...remainingEditors, nextLockHolder]
+        : remainingEditors,
+    }) ?? {
+      project_key: fallbackProjectKey,
+      page_editors: nextLockHolder ? [nextLockHolder] : [],
     }
   );
 }
@@ -194,43 +296,63 @@ export const useTranslatorCollaborationStore = defineStore(
       return connection.value?.state === HubConnectionState.Connected;
     });
 
-    const pageEditorsByPageKey = computed<
-      Record<string, TranslatorPageEditorState>
-    >(() => {
-      const nextMap: Record<string, TranslatorPageEditorState> = {};
 
-      projectState.value?.page_editors.forEach((pageEditor) => {
-        nextMap[pageEditor.page_key] = pageEditor;
-      });
+const pageEditorsByPageKey = computed<
+  Record<string, TranslatorPageEditorState[]>
+>(() => {
+  const nextMap: Record<string, TranslatorPageEditorState[]> = {};
 
-      return nextMap;
-    });
+  projectState.value?.page_editors.forEach((pageEditor) => {
+    nextMap[pageEditor.page_key] = [
+      ...(nextMap[pageEditor.page_key] ?? []),
+      pageEditor,
+    ];
+  });
 
-    const currentPageEditor = computed<TranslatorPageEditorState | null>(() => {
-      if (!activePageKey.value) {
-        return null;
-      }
+  Object.keys(nextMap).forEach((pageKey) => {
+    nextMap[pageKey] = sortProjectEditors(nextMap[pageKey]);
+  });
 
-      return pageEditorsByPageKey.value[activePageKey.value] ?? null;
-    });
+  return nextMap;
+});
 
-    const hasCurrentPageLock = computed(() => {
-      if (!sessionProfile.value || !currentPageEditor.value) {
-        return false;
-      }
+const currentPageEditors = computed<TranslatorPageEditorState[]>(() => {
+  if (!activePageKey.value) {
+    return [];
+  }
 
-      return currentPageEditor.value.user_id === sessionProfile.value.user_id;
-    });
+  return pageEditorsByPageKey.value[activePageKey.value] ?? [];
+});
 
-    const isCurrentPageLockedByOther = computed(() => {
-      if (!sessionProfile.value || !currentPageEditor.value) {
-        return false;
-      }
+const currentPageEditor = computed<TranslatorPageEditorState | null>(() => {
+  return (
+    currentPageEditors.value.find(
+      (pageEditor) => pageEditor.editor_state === "lock_holder",
+    ) ?? null
+  );
+});
 
-      return currentPageEditor.value.user_id !== sessionProfile.value.user_id;
-    });
+const hasCurrentPageLock = computed(() => {
+  if (!sessionProfile.value || !currentPageEditor.value) {
+    return false;
+  }
 
-    function resetCollaborationState(clearProfile = true): void {
+  return currentPageEditor.value.user_id === sessionProfile.value.user_id;
+});
+
+const isCurrentPageLockedByOther = computed(() => {
+  if (!currentPageEditor.value) {
+    return false;
+  }
+
+  if (!sessionProfile.value) {
+    return true;
+  }
+
+  return currentPageEditor.value.user_id !== sessionProfile.value.user_id;
+});
+
+function resetCollaborationState(clearProfile = true): void {
       projectState.value = null;
       pageSnapshots.value = {};
       activeProjectKey.value = "";
@@ -405,6 +527,7 @@ export const useTranslatorCollaborationStore = defineStore(
               page_key: activePageKey.value,
               page_index: activePageIndex.value,
               page_name: activePageName.value,
+              mode: activeMode.value,
               units: lastKnownUnitsByPageKey.value[activePageKey.value] ?? [],
             },
           ),
@@ -424,11 +547,23 @@ export const useTranslatorCollaborationStore = defineStore(
         return;
       }
 
-      sessionProfile.value = {
+      const nextProfile = {
         user_id: args.user_id,
         display_name: args.display_name.trim() || "协作成员",
         avatar_url: args.avatar_url?.trim() || undefined,
       };
+
+      const shouldReuseActiveSession =
+        activeProjectKey.value === args.project_key &&
+        isSameCollaboratorProfile(sessionProfile.value, nextProfile) &&
+        connection.value?.state === HubConnectionState.Connected &&
+        projectState.value?.project_key === args.project_key;
+
+      sessionProfile.value = nextProfile;
+
+      if (shouldReuseActiveSession) {
+        return;
+      }
 
       if (
         activeProjectKey.value &&
@@ -449,8 +584,8 @@ export const useTranslatorCollaborationStore = defineStore(
       const nextState = normalizeProjectState(
         await activeConnection.invoke<TranslatorProjectState>("JoinProject", {
           project_key: args.project_key,
-          display_name: sessionProfile.value.display_name,
-          avatar_url: sessionProfile.value.avatar_url,
+          display_name: nextProfile.display_name,
+          avatar_url: nextProfile.avatar_url,
         }),
       );
 
@@ -478,157 +613,233 @@ export const useTranslatorCollaborationStore = defineStore(
       }
     }
 
-    async function openPage(
-      args: OpenPageArgs,
-    ): Promise<TranslatorPageSnapshot | null> {
-      activePageKey.value = args.page_key;
-      activePageIndex.value = args.page_index;
-      activePageName.value = args.page_name;
-      lastKnownUnitsByPageKey.value = {
-        ...lastKnownUnitsByPageKey.value,
-        [args.page_key]: cloneUnits(args.units),
-      };
 
-      if (!sessionProfile.value || !authStore.isLoggedIn) {
-        return null;
-      }
+async function openPage(
+  args: OpenPageArgs,
+): Promise<TranslatorPageSnapshot | null> {
+  const reopeningLockedPage =
+    hasCurrentPageLock.value && activePageKey.value === args.page_key;
 
-      await flushPendingPageSnapshotSync();
+  await flushPendingPageSnapshotSync();
 
-      const activeConnection = await ensureConnection();
-      const snapshot = normalizeSnapshot(
-        await activeConnection.invoke<TranslatorPageSnapshot | null>(
-          "OpenPage",
-          {
-            project_key: args.project_key,
-            page_key: args.page_key,
-            page_index: args.page_index,
-            page_name: args.page_name,
-            units: cloneUnits(args.units),
-          },
-        ),
-      );
+  activePageKey.value = args.page_key;
+  activePageIndex.value = args.page_index;
+  activePageName.value = args.page_name;
+  activeMode.value = args.mode;
+  lastKnownUnitsByPageKey.value = {
+    ...lastKnownUnitsByPageKey.value,
+    [args.page_key]: cloneUnits(args.units),
+  };
 
-      if (snapshot) {
-        rememberSnapshot(snapshot);
-      }
+  const activeSessionProfile = sessionProfile.value;
+  if (activeSessionProfile) {
+    const nextPresenceEditor = buildSessionPageEditor({
+      sessionProfile: activeSessionProfile,
+      pageKey: args.page_key,
+      pageIndex: args.page_index,
+      pageName: args.page_name,
+      mode: args.mode,
+      editorState: reopeningLockedPage ? "lock_holder" : "viewing",
+    });
 
-      return snapshot;
-    }
+    projectState.value = replaceSessionProjectEditors(
+      projectState.value,
+      activeSessionProfile.user_id,
+      [nextPresenceEditor],
+      args.project_key,
+    );
+  }
 
-    async function tryAcquirePageLock(mode: TranslatorMode): Promise<boolean> {
-      if (
-        !sessionProfile.value ||
-        !activeProjectKey.value ||
-        !activePageKey.value
-      ) {
-        return false;
-      }
+  if (!activeSessionProfile || !authStore.isLoggedIn) {
+    return null;
+  }
 
-      const activeConnection = connection.value;
-      if (
-        !activeConnection ||
-        activeConnection.state !== HubConnectionState.Connected
-      ) {
-        throw new Error("实时协作连接尚未建立");
-      }
+  const activeConnection = await ensureConnection();
+  const snapshot = normalizeSnapshot(
+    await activeConnection.invoke<TranslatorPageSnapshot | null>(
+      "OpenPage",
+      {
+        project_key: args.project_key,
+        page_key: args.page_key,
+        page_index: args.page_index,
+        page_name: args.page_name,
+        mode: args.mode,
+        units: cloneUnits(args.units),
+      },
+    ),
+  );
 
-      const result = await activeConnection.invoke<TryAcquirePageLockResult>(
-        "TryAcquirePageLock",
-        {
-          project_key: activeProjectKey.value,
-          page_key: activePageKey.value,
-          page_index: activePageIndex.value,
-          page_name: activePageName.value,
+  if (snapshot) {
+    rememberSnapshot(snapshot);
+  }
+
+  return snapshot;
+}
+
+
+async function tryAcquirePageLock(mode: TranslatorMode): Promise<boolean> {
+  if (
+    !sessionProfile.value ||
+    !activeProjectKey.value ||
+    !activePageKey.value
+  ) {
+    return false;
+  }
+
+  const activeConnection = connection.value;
+  if (
+    !activeConnection ||
+    activeConnection.state !== HubConnectionState.Connected
+  ) {
+    throw new Error("实时协作连接尚未建立");
+  }
+
+  const result = await activeConnection.invoke<TryAcquirePageLockResult>(
+    "TryAcquirePageLock",
+    {
+      project_key: activeProjectKey.value,
+      page_key: activePageKey.value,
+      page_index: activePageIndex.value,
+      page_name: activePageName.value,
+      mode,
+    },
+  );
+
+  activeMode.value = mode;
+  const activeSessionProfile = sessionProfile.value;
+
+  if (result.acquired && activeSessionProfile) {
+    const nextLockHolder = normalizeEditor(
+      result.editor ??
+        buildSessionPageEditor({
+          sessionProfile: activeSessionProfile,
+          pageKey: activePageKey.value,
+          pageIndex: activePageIndex.value,
+          pageName: activePageName.value,
           mode,
-        },
+          editorState: "lock_holder",
+        }),
+    );
+
+    projectState.value = replaceSessionProjectEditors(
+      projectState.value,
+      activeSessionProfile.user_id,
+      [nextLockHolder],
+      activeProjectKey.value,
+    );
+  } else if (result.editor) {
+    projectState.value = replacePageLockHolder(
+      projectState.value,
+      activePageKey.value,
+      normalizeEditor(result.editor),
+      activeProjectKey.value,
+    );
+  }
+
+  return result.acquired;
+}
+
+
+async function updateActiveMode(mode: TranslatorMode): Promise<void> {
+  activeMode.value = mode;
+
+  if (
+    !hasCurrentPageLock.value ||
+    !activeProjectKey.value ||
+    !activePageKey.value
+  ) {
+    return;
+  }
+
+  const activeConnection = connection.value;
+  if (
+    !activeConnection ||
+    activeConnection.state !== HubConnectionState.Connected
+  ) {
+    return;
+  }
+
+  await activeConnection.invoke("UpdatePageLockMode", {
+    project_key: activeProjectKey.value,
+    page_key: activePageKey.value,
+    mode,
+  });
+
+  const activeSessionProfile = sessionProfile.value;
+  if (currentPageEditor.value && activeSessionProfile) {
+    const nextLockHolder = buildSessionPageEditor({
+      sessionProfile: activeSessionProfile,
+      pageKey: activePageKey.value,
+      pageIndex: activePageIndex.value,
+      pageName: activePageName.value,
+      mode,
+      editorState: "lock_holder",
+      acquiredAt: Date.now(),
+    });
+
+    projectState.value = replaceSessionProjectEditors(
+      projectState.value,
+      activeSessionProfile.user_id,
+      [nextLockHolder],
+      activeProjectKey.value,
+    );
+  }
+}
+
+
+async function releaseCurrentPageLock(): Promise<void> {
+  if (
+    !hasCurrentPageLock.value ||
+    !activeProjectKey.value ||
+    !activePageKey.value
+  ) {
+    return;
+  }
+
+  await flushPendingPageSnapshotSync();
+
+  const activeSessionProfile = sessionProfile.value;
+  const viewingEditor = activeSessionProfile
+    ? buildSessionPageEditor({
+        sessionProfile: activeSessionProfile,
+        pageKey: activePageKey.value,
+        pageIndex: activePageIndex.value,
+        pageName: activePageName.value,
+        mode: activeMode.value,
+        editorState: "viewing",
+        acquiredAt: Date.now(),
+      })
+    : undefined;
+
+  const activeConnection = connection.value;
+  if (
+    !activeConnection ||
+    activeConnection.state !== HubConnectionState.Connected
+  ) {
+    if (activeSessionProfile && viewingEditor) {
+      projectState.value = replaceSessionProjectEditors(
+        projectState.value,
+        activeSessionProfile.user_id,
+        [viewingEditor],
+        activeProjectKey.value,
       );
-
-      activeMode.value = mode;
-      if (result.editor) {
-        projectState.value = upsertProjectEditor(
-          projectState.value,
-          result.editor,
-          activeProjectKey.value,
-        );
-      }
-
-      return result.acquired;
     }
+    return;
+  }
 
-    async function updateActiveMode(mode: TranslatorMode): Promise<void> {
-      activeMode.value = mode;
+  await activeConnection.invoke("ReleaseCurrentPageLock", {
+    project_key: activeProjectKey.value,
+  });
 
-      if (
-        !hasCurrentPageLock.value ||
-        !activeProjectKey.value ||
-        !activePageKey.value
-      ) {
-        return;
-      }
-
-      const activeConnection = connection.value;
-      if (
-        !activeConnection ||
-        activeConnection.state !== HubConnectionState.Connected
-      ) {
-        return;
-      }
-
-      await activeConnection.invoke("UpdatePageLockMode", {
-        project_key: activeProjectKey.value,
-        page_key: activePageKey.value,
-        mode,
-      });
-
-      if (currentPageEditor.value) {
-        projectState.value = upsertProjectEditor(
-          projectState.value,
-          {
-            ...currentPageEditor.value,
-            mode,
-            acquired_at: Date.now(),
-          },
-          activeProjectKey.value,
-        );
-      }
-    }
-
-    async function releaseCurrentPageLock(): Promise<void> {
-      if (
-        !hasCurrentPageLock.value ||
-        !activeProjectKey.value ||
-        !activePageKey.value
-      ) {
-        return;
-      }
-
-      await flushPendingPageSnapshotSync();
-
-      const activeConnection = connection.value;
-      if (
-        !activeConnection ||
-        activeConnection.state !== HubConnectionState.Connected
-      ) {
-        projectState.value = upsertProjectEditor(
-          projectState.value,
-          undefined,
-          activeProjectKey.value,
-        );
-        return;
-      }
-
-      await activeConnection.invoke("ReleaseCurrentPageLock", {
-        project_key: activeProjectKey.value,
-      });
-
-      projectState.value = normalizeProjectState({
-        project_key: activeProjectKey.value,
-        page_editors: (projectState.value?.page_editors ?? []).filter(
-          (pageEditor) => pageEditor.page_key !== activePageKey.value,
-        ),
-      });
-    }
+  if (activeSessionProfile && viewingEditor) {
+    projectState.value = replaceSessionProjectEditors(
+      projectState.value,
+      activeSessionProfile.user_id,
+      [viewingEditor],
+      activeProjectKey.value,
+    );
+  }
+}
 
     function schedulePageSnapshotSync(units: LocalProjectUnit[]): void {
       if (!activeProjectKey.value || !activePageKey.value) {
@@ -709,6 +920,7 @@ export const useTranslatorCollaborationStore = defineStore(
       activeMode,
       isConnected,
       pageEditorsByPageKey,
+      currentPageEditors,
       currentPageEditor,
       hasCurrentPageLock,
       isCurrentPageLockedByOther,

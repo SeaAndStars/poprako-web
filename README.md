@@ -26,7 +26,49 @@ pnpm electron:dev
 说明：
 
 - `pnpm electron:dev` 会先拉起 Vite，再自动等待服务可用后启动 Electron。
-- 默认连接 `http://127.0.0.1:5173`，可通过 `.env` 中 `FRONTEND_HOST` / `FRONTEND_PORT` 覆盖。
+- 默认连接 `http://127.0.0.1:5173`，可通过当前 mode 对应 env 文件中的 `FRONTEND_HOST` / `FRONTEND_PORT` 覆盖。
+- 当前已按模式拆分环境文件，日常开发优先使用 `.env.development`，可参考 `.env.example`。
+
+## 2.1 模式环境变量
+
+前端现在提供四套模式环境文件，按 Vite mode 自动切换：
+
+- `.env.development`
+- `.env.test`
+- `.env.staging`
+- `.env.production`
+
+常用命令如下：
+
+```bash
+# 开发模式
+pnpm dev
+
+# 测试环境模式
+pnpm dev:test
+
+# 预发布环境构建
+pnpm build:staging
+
+# 正式环境构建（默认）
+pnpm build
+pnpm build:production
+```
+
+当前约定如下：
+
+- `lpn.seastarss.cn` 是前端站点。
+- 前端与后端 API 一起部署时，前端直接访问同域 `/api/v1`。
+- 开发态和本地 preview 如需转发到独立后端，可在对应模式文件里配置 `VITE_API_PROXY_TARGET=http://127.0.0.1:5485`。
+- SignalR 也走同域 `/hubs/translator-collaboration`，因此线上 Nginx 需要同时代理 `/api/` 和 `/hubs/`。
+
+Vite 环境优先级仍然遵循 mode 规则，示例以 production 为例：
+
+1. `.env.production`
+2. `.env.production.local`
+3. 当前 shell 已显式导出的环境变量
+
+仓库里保留 `.env.example` 与 `.env.production.example` 作为参考样例。
 
 ## 3. 质量门禁（必须先通过）
 

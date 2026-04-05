@@ -113,7 +113,10 @@ export async function updateInvitation(
 ): Promise<UpdateInvitationResponse> {
   await httpClient.put<UpdateInvitationResponse, UpdateInvitationRequest>(
     `/invitations/${invitationID}`,
-    updateInvitationArgs,
+    {
+      ...updateInvitationArgs,
+      id: invitationID,
+    },
   );
 }
 
