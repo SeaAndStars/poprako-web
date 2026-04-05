@@ -27,6 +27,8 @@ import type { PageInfo, UnitInfo } from "../types/domain";
 
 const ONLINE_WORKSPACE_STORAGE_KEY = "poprako_online_workspace_cache_v1";
 const ONLINE_PAGE_SAVE_DEBOUNCE_MS = 450;
+const ONLINE_INITIAL_PRELOAD_PAGE_COUNT = 3;
+const ONLINE_PAGE_PREFETCH_LOOKAHEAD = 2;
 
 type RemoteIndexBase = 0 | 1;
 
@@ -145,7 +147,9 @@ function buildPageLocalUnit(
     translated_text: unitInfo.translated_text ?? "",
     proofread_text: unitInfo.proofread_text ?? "",
     translator_comment: unitInfo.translator_comment ?? "",
+    translator_id: unitInfo.translator_id?.trim() || undefined,
     proofreader_comment: unitInfo.proofreader_comment ?? "",
+    proofreader_id: unitInfo.proofreader_id?.trim() || undefined,
     revision: Math.max(unitInfo.revision ?? 1, 1),
     last_edited_by: unitInfo.last_edited_by?.trim() || undefined,
     last_edited_at: unitInfo.last_edited_at,
@@ -165,7 +169,9 @@ function resolveRemoteComparableUnit(
   translated_text: string;
   proofread_text: string;
   translator_comment: string;
+  translator_id?: string;
   proofreader_comment: string;
+  proofreader_id?: string;
 } {
   const width = Math.max(pageRecord.image_width, 1);
   const height = Math.max(pageRecord.image_height, 1);
@@ -184,7 +190,9 @@ function resolveRemoteComparableUnit(
     translated_text: normalizeOptionalText(projectUnit.translated_text),
     proofread_text: normalizeOptionalText(projectUnit.proofread_text),
     translator_comment: normalizeOptionalText(projectUnit.translator_comment),
+    translator_id: projectUnit.translator_id?.trim() || undefined,
     proofreader_comment: normalizeOptionalText(projectUnit.proofreader_comment),
+    proofreader_id: projectUnit.proofreader_id?.trim() || undefined,
   };
 }
 
@@ -218,7 +226,10 @@ function areRemoteComparableUnitsEqual(
       leftComparable.proofread_text !== rightComparable.proofread_text ||
       leftComparable.translator_comment !==
         rightComparable.translator_comment ||
-      leftComparable.proofreader_comment !== rightComparable.proofreader_comment
+      leftComparable.translator_id !== rightComparable.translator_id ||
+      leftComparable.proofreader_comment !==
+        rightComparable.proofreader_comment ||
+      leftComparable.proofreader_id !== rightComparable.proofreader_id
     ) {
       return false;
     }
@@ -285,6 +296,34 @@ function loadPersistedWorkspaces(): Record<string, OnlineWorkspaceRecord> {
   }
 }
 
+function isCachedWebAssetSource(
+  imageSource: LocalProjectImageSource,
+): imageSource is Extract<LocalProjectImageSource, { kind: "web-asset" }> {
+  return imageSource.kind === "web-asset";
+}
+
+function buildRemotePageRecord(
+  pageInfo: PageInfo,
+  displayIndex: number,
+): OnlineWorkspacePageRecord {
+  const pageName = resolvePageDisplayName(displayIndex);
+
+  return {
+    id: pageInfo.id,
+    index: displayIndex,
+    name: pageName,
+    image_source: {
+      kind: "web-remote",
+      name: pageName,
+      remote_url: pageInfo.image_url ?? "",
+    },
+    image_remote_url: pageInfo.image_url,
+    image_width: 1,
+    image_height: 1,
+    remote_index_base: 0,
+  };
+}
+
 export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
   const workspaces = ref<Record<string, OnlineWorkspaceRecord>>(
     loadPersistedWorkspaces(),
@@ -295,6 +334,10 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
 
   const pendingSaveTimers = new Map<string, number>();
   const inflightSaveJobs = new Map<string, Promise<void>>();
+  const inflightPageImageJobs = new Map<
+    string,
+    Promise<OnlineWorkspacePageRecord>
+  >();
 
   function persistWorkspaceState(): void {
     localStorage.setItem(
@@ -311,6 +354,28 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
       [workspaceRecord.chapter_id]: workspaceRecord,
     };
     persistWorkspaceState();
+  }
+
+  function setWorkspacePageRecord(
+    chapterID: string,
+    nextPageRecord: OnlineWorkspacePageRecord,
+  ): OnlineWorkspacePageRecord {
+    const targetWorkspace = workspaces.value[chapterID];
+    if (!targetWorkspace) {
+      return nextPageRecord;
+    }
+
+    setWorkspaceRecord({
+      ...targetWorkspace,
+      updated_at: new Date().toISOString(),
+      pages: targetWorkspace.pages.map((pageRecord) => {
+        return pageRecord.id === nextPageRecord.id
+          ? nextPageRecord
+          : pageRecord;
+      }),
+    });
+
+    return nextPageRecord;
   }
 
   function setChapterLoading(chapterID: string, isLoading: boolean): void {
@@ -332,41 +397,105 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
   }
 
   async function cacheOnlinePage(
-    pageInfo: PageInfo,
-    displayIndex: number,
+    chapterID: string,
+    pageRecord: OnlineWorkspacePageRecord,
   ): Promise<OnlineWorkspacePageRecord> {
-    if (!pageInfo.image_url) {
-      throw new Error(`第 ${displayIndex} 页缺少图片地址，无法进入在线工作区`);
+    if (!pageRecord.image_remote_url) {
+      throw new Error(
+        `第 ${pageRecord.index} 页缺少图片地址，无法进入在线工作区`,
+      );
     }
 
     const resolvedImageURL =
-      resolveAssetUrl(pageInfo.image_url) || pageInfo.image_url;
+      resolveAssetUrl(pageRecord.image_remote_url) ||
+      pageRecord.image_remote_url;
     const response = await fetch(resolvedImageURL);
     if (!response.ok) {
-      throw new Error(`下载第 ${displayIndex} 页图片失败`);
+      throw new Error(`下载第 ${pageRecord.index} 页图片失败`);
     }
 
     const imageBlob = await response.blob();
     const imageSize = await resolveImageSize(imageBlob);
     const assetID = await storeWebProjectImageAssetBlob(
       imageBlob,
-      `chapter-${pageInfo.chapter_id}-page-${displayIndex}`,
+      `chapter-${chapterID}-page-${pageRecord.index}`,
     );
 
     return {
-      id: pageInfo.id,
-      index: displayIndex,
-      name: resolvePageDisplayName(displayIndex),
+      ...pageRecord,
       image_source: {
         kind: "web-asset",
         asset_id: assetID,
-        name: resolvePageDisplayName(displayIndex),
+        name: pageRecord.name,
       },
-      image_remote_url: pageInfo.image_url,
       image_width: imageSize.width,
       image_height: imageSize.height,
-      remote_index_base: 0,
     };
+  }
+
+  async function ensurePageImageCached(
+    chapterID: string,
+    pageID: string,
+  ): Promise<OnlineWorkspacePageRecord | null> {
+    const pageRecord = resolveWorkspacePage(chapterID, pageID);
+    if (!pageRecord) {
+      return null;
+    }
+
+    if (isCachedWebAssetSource(pageRecord.image_source)) {
+      return pageRecord;
+    }
+
+    const jobKey = `${chapterID}:${pageID}`;
+    const inflightJob = inflightPageImageJobs.get(jobKey);
+    if (inflightJob) {
+      return inflightJob;
+    }
+
+    const nextJob = cacheOnlinePage(chapterID, pageRecord)
+      .then((nextPageRecord) => {
+        return setWorkspacePageRecord(chapterID, nextPageRecord);
+      })
+      .finally(() => {
+        inflightPageImageJobs.delete(jobKey);
+      });
+
+    inflightPageImageJobs.set(jobKey, nextJob);
+    return nextJob;
+  }
+
+  function schedulePagePrefetch(
+    chapterID: string,
+    currentPageIndex: number,
+  ): void {
+    const targetWorkspace = workspaces.value[chapterID];
+    if (!targetWorkspace) {
+      return;
+    }
+
+    for (
+      let offset = 1;
+      offset <= ONLINE_PAGE_PREFETCH_LOOKAHEAD;
+      offset += 1
+    ) {
+      const nextPageRecord = targetWorkspace.pages[currentPageIndex + offset];
+      if (
+        !nextPageRecord ||
+        isCachedWebAssetSource(nextPageRecord.image_source)
+      ) {
+        continue;
+      }
+
+      void ensurePageImageCached(chapterID, nextPageRecord.id).catch(
+        (error) => {
+          console.warn(
+            "[online-workspace] 页面预缓存失败:",
+            nextPageRecord.id,
+            error,
+          );
+        },
+      );
+    }
   }
 
   async function ensureChapterWorkspace(
@@ -384,50 +513,91 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
         (left, right) => left.index - right.index,
       );
       const existingWorkspace = workspaces.value[args.chapter_id];
-
-      const canReuseCachedPages =
-        Boolean(existingWorkspace) &&
-        existingWorkspace.pages.length === sortedPages.length &&
-        existingWorkspace.pages.every((pageRecord, index) => {
-          const nextPageInfo = sortedPages[index];
-          return (
-            pageRecord.id === nextPageInfo.id &&
-            pageRecord.image_remote_url ===
-              (nextPageInfo.image_url ?? undefined)
-          );
-        });
-
+      const existingPageMap = new Map(
+        (existingWorkspace?.pages ?? []).map((pageRecord) => [
+          pageRecord.id,
+          pageRecord,
+        ]),
+      );
+      const nextPageIDSet = new Set(sortedPages.map((pageInfo) => pageInfo.id));
+      const staleAssetIDs = new Set<string>();
       let nextPages: OnlineWorkspacePageRecord[] = [];
 
-      if (canReuseCachedPages && existingWorkspace) {
-        nextPages = existingWorkspace.pages.map((pageRecord, index) => ({
-          ...pageRecord,
-          index: index + 1,
-          name: resolvePageDisplayName(index + 1),
-          image_remote_url:
-            sortedPages[index]?.image_url ?? pageRecord.image_remote_url,
-        }));
-      } else {
-        nextPages = [];
+      for (let index = 0; index < sortedPages.length; index += 1) {
+        const pageInfo = sortedPages[index];
+        const displayIndex = index + 1;
+        const shouldPreload = displayIndex <= ONLINE_INITIAL_PRELOAD_PAGE_COUNT;
+        const existingPageRecord = existingPageMap.get(pageInfo.id);
+        const nextRemoteUrl = pageInfo.image_url ?? undefined;
 
-        for (let index = 0; index < sortedPages.length; index += 1) {
-          nextPages.push(await cacheOnlinePage(sortedPages[index], index + 1));
+        if (
+          existingPageRecord &&
+          existingPageRecord.image_remote_url === nextRemoteUrl
+        ) {
+          let reusedPageRecord: OnlineWorkspacePageRecord = {
+            ...existingPageRecord,
+            index: displayIndex,
+            name: resolvePageDisplayName(displayIndex),
+            image_remote_url: nextRemoteUrl,
+            image_source:
+              existingPageRecord.image_source.kind === "web-remote"
+                ? {
+                    ...existingPageRecord.image_source,
+                    name: resolvePageDisplayName(displayIndex),
+                    remote_url: nextRemoteUrl ?? "",
+                  }
+                : {
+                    ...existingPageRecord.image_source,
+                    name: resolvePageDisplayName(displayIndex),
+                  },
+          };
+
+          if (
+            shouldPreload &&
+            !isCachedWebAssetSource(reusedPageRecord.image_source)
+          ) {
+            reusedPageRecord = await cacheOnlinePage(
+              args.chapter_id,
+              reusedPageRecord,
+            );
+          }
+
+          nextPages.push(reusedPageRecord);
+          continue;
         }
 
-        if (existingWorkspace) {
-          const staleAssetIDs = existingWorkspace.pages
-            .map((pageRecord) => pageRecord.image_source)
-            .filter(
-              (
-                imageSource,
-              ): imageSource is Extract<
-                LocalProjectImageSource,
-                { kind: "web-asset" }
-              > => imageSource.kind === "web-asset",
-            )
-            .map((imageSource) => imageSource.asset_id);
+        if (
+          existingPageRecord &&
+          isCachedWebAssetSource(existingPageRecord.image_source)
+        ) {
+          staleAssetIDs.add(existingPageRecord.image_source.asset_id);
+        }
 
-          await deleteWebProjectImageAssets(staleAssetIDs);
+        let nextPageRecord = buildRemotePageRecord(pageInfo, displayIndex);
+        if (shouldPreload) {
+          nextPageRecord = await cacheOnlinePage(
+            args.chapter_id,
+            nextPageRecord,
+          );
+        }
+
+        nextPages.push(nextPageRecord);
+      }
+
+      if (existingWorkspace) {
+        existingWorkspace.pages.forEach((pageRecord) => {
+          if (
+            nextPageIDSet.has(pageRecord.id) ||
+            !isCachedWebAssetSource(pageRecord.image_source)
+          ) {
+            return;
+          }
+
+          staleAssetIDs.add(pageRecord.image_source.asset_id);
+        });
+
+        if (staleAssetIDs.size > 0) {
+          await deleteWebProjectImageAssets([...staleAssetIDs]);
         }
       }
 
@@ -573,8 +743,10 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
             toPatchTextValue(projectUnit.proofread_text) ?? undefined,
           translator_comment:
             toPatchTextValue(projectUnit.translator_comment) ?? undefined,
+          translator_id: projectUnit.translator_id?.trim() || undefined,
           proofreader_comment:
             toPatchTextValue(projectUnit.proofreader_comment) ?? undefined,
+          proofreader_id: projectUnit.proofreader_id?.trim() || undefined,
         };
       });
 
@@ -640,6 +812,10 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
           );
         }
 
+        if (previousComparable.translator_id !== nextComparable.translator_id) {
+          patchUnit.translator_id = projectUnit.translator_id?.trim() || null;
+        }
+
         if (
           previousComparable.proofreader_comment !==
           nextComparable.proofreader_comment
@@ -647,6 +823,12 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
           patchUnit.proofreader_comment = toPatchTextValue(
             projectUnit.proofreader_comment,
           );
+        }
+
+        if (
+          previousComparable.proofreader_id !== nextComparable.proofreader_id
+        ) {
+          patchUnit.proofreader_id = projectUnit.proofreader_id?.trim() || null;
         }
 
         return patchUnit;
@@ -754,6 +936,8 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
     loadingChapterIDs,
     ensureChapterWorkspace,
     loadPageUnits,
+    ensurePageImageCached,
+    schedulePagePrefetch,
     replaceRuntimePageUnits,
     updateLastPageIndex,
     schedulePageUnitsSave,

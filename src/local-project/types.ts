@@ -28,11 +28,24 @@ export interface WebProjectImageSource {
 }
 
 /**
+ * 在线工作区中尚未落入 IndexedDB 的远端页面图片来源。
+ * 这类页面只保存远端地址与展示名，真正访问时再按需缓存。
+ */
+export interface WebRemoteProjectImageSource {
+  kind: "web-remote";
+  /** 页面展示名称。 */
+  name: string;
+  /** 远端图片地址。 */
+  remote_url: string;
+}
+
+/**
  * 页面图片来源联合类型。
  */
 export type LocalProjectImageSource =
   | ElectronProjectImageSource
-  | WebProjectImageSource;
+  | WebProjectImageSource
+  | WebRemoteProjectImageSource;
 
 /**
  * 本地项目中的单页标记单元。
@@ -60,8 +73,12 @@ export interface LocalProjectUnit {
   proofread_text: string;
   /** 翻译备注。 */
   translator_comment: string;
+  /** 翻译归属用户 ID。 */
+  translator_id?: string;
   /** 校对备注。 */
   proofreader_comment: string;
+  /** 校对归属用户 ID。 */
+  proofreader_id?: string;
   /** 本地协作版本号，用于标记最近一次改动。 */
   revision: number;
   /** 最近编辑者显示名。 */

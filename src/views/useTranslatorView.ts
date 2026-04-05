@@ -27,6 +27,7 @@ import {
 import { useSpecialSymbolsStore } from "../stores/specialSymbols";
 import {
   useTranslatorCollaborationStore,
+  type TranslatorCollaboratorIdentity,
   type TranslatorPageEditorState,
   type TranslatorPageSnapshot,
 } from "../stores/translatorCollaboration";
@@ -42,7 +43,11 @@ import {
 import { Modal, message } from "ant-design-vue";
 import { storeToRefs } from "pinia";
 import { useRoute, useRouter } from "vue-router";
-import { getCurrentUserProfile } from "../api/modules";
+import {
+  getAssignmentList,
+  getCurrentUserProfile,
+  getUserProfileByID,
+} from "../api/modules";
 import {
   appendCacheBustQueryToSharedAssetUrl,
   appendCacheBustQueryToUrl,
@@ -53,9 +58,20 @@ import {
 export const USER_PROFILE_UPDATED_EVENT = "poprako:user-profile-updated";
 
 type EditableFieldKey = "translated_text" | "proofread_text";
+type UnitOwnerRole = "translate" | "proofread";
 
 interface SyncCurrentUserProfileOptions {
   clearDisplayAssetCache?: boolean;
+}
+
+interface ShortcutHelpItem {
+  keys: string;
+  description: string;
+}
+
+interface ShortcutHelpSection {
+  title: string;
+  items: ShortcutHelpItem[];
 }
 
 export function useTranslatorView() {
@@ -92,6 +108,15 @@ export function useTranslatorView() {
     Promise<string | undefined>
   >();
   let themeObserver: MutationObserver | null = null;
+  const relatedUserProfiles = ref<Record<string, UserInfo>>({});
+  const relatedCollaboratorIdentities = ref<
+    Record<string, TranslatorCollaboratorIdentity>
+  >({});
+  const pendingRelatedUserProfileLoads = new Map<
+    string,
+    Promise<UserInfo | null>
+  >();
+  const pendingOnlineAssignmentProfileLoads = new Map<string, Promise<void>>();
 
   function resolveRequestedEditorModeFromRoute(): TranslatorMode {
     const routeMode =
@@ -178,7 +203,7 @@ export function useTranslatorView() {
 
   const workspaceLoadingTip = computed(() => {
     return isOnlineWorkspace.value
-      ? "正在首次下载整章图片并准备在线房间..."
+      ? "正在准备在线章节与前三页缓存..."
       : "正在加载项目...";
   });
 
@@ -338,22 +363,341 @@ export function useTranslatorView() {
     );
   });
 
-  const currentUserAvatarURL = computed(() => {
+  function setRelatedUserProfile(userProfile: UserInfo): void {
+    if (!userProfile.id) {
+      return;
+    }
+
+    relatedUserProfiles.value = {
+      ...relatedUserProfiles.value,
+      [userProfile.id]: userProfile,
+    };
+
+    rememberCollaboratorIdentity({
+      user_id: userProfile.id,
+      display_name: resolveUserDisplayName(userProfile, userProfile.id),
+      avatar_url:
+        appendCacheBustQueryToSharedAssetUrl(
+          resolveUserAvatarRawURL(userProfile),
+          userProfile.updated_at,
+        ) || resolveUserAvatarRawURL(userProfile),
+    });
+  }
+
+  function normalizeCollaboratorIdentity(
+    identity: TranslatorCollaboratorIdentity | null | undefined,
+  ): TranslatorCollaboratorIdentity | null {
+    const normalizedUserID = identity?.user_id?.trim();
+    if (!normalizedUserID) {
+      return null;
+    }
+
+    return {
+      user_id: normalizedUserID,
+      display_name: identity?.display_name?.trim() || normalizedUserID,
+      avatar_url: identity?.avatar_url?.trim() || undefined,
+    };
+  }
+
+  function rememberCollaboratorIdentity(
+    identity: TranslatorCollaboratorIdentity | null | undefined,
+  ): void {
+    const normalizedIdentity = normalizeCollaboratorIdentity(identity);
+    if (!normalizedIdentity) {
+      return;
+    }
+
+    const currentIdentity =
+      relatedCollaboratorIdentities.value[normalizedIdentity.user_id];
+    if (
+      currentIdentity?.display_name === normalizedIdentity.display_name &&
+      currentIdentity?.avatar_url === normalizedIdentity.avatar_url
+    ) {
+      return;
+    }
+
+    relatedCollaboratorIdentities.value = {
+      ...relatedCollaboratorIdentities.value,
+      [normalizedIdentity.user_id]: normalizedIdentity,
+    };
+  }
+
+  function rememberCollaboratorIdentities(
+    identities: TranslatorCollaboratorIdentity[],
+  ): void {
+    let nextIdentityMap = relatedCollaboratorIdentities.value;
+    let hasChanged = false;
+
+    identities.forEach((identity) => {
+      const normalizedIdentity = normalizeCollaboratorIdentity(identity);
+      if (!normalizedIdentity) {
+        return;
+      }
+
+      const currentIdentity = nextIdentityMap[normalizedIdentity.user_id];
+      if (
+        currentIdentity?.display_name === normalizedIdentity.display_name &&
+        currentIdentity?.avatar_url === normalizedIdentity.avatar_url
+      ) {
+        return;
+      }
+
+      if (!hasChanged) {
+        nextIdentityMap = { ...nextIdentityMap };
+        hasChanged = true;
+      }
+
+      nextIdentityMap[normalizedIdentity.user_id] = normalizedIdentity;
+    });
+
+    if (hasChanged) {
+      relatedCollaboratorIdentities.value = nextIdentityMap;
+    }
+  }
+
+  function resolveKnownUserProfile(
+    userID: string | undefined,
+  ): UserInfo | undefined {
+    if (!userID) {
+      return undefined;
+    }
+
+    if (currentUserProfile.value?.id === userID) {
+      return currentUserProfile.value;
+    }
+
+    return relatedUserProfiles.value[userID];
+  }
+
+  function resolveKnownCollaboratorIdentity(
+    userID: string | undefined,
+  ): TranslatorCollaboratorIdentity | undefined {
+    if (!userID) {
+      return undefined;
+    }
+
+    if (currentUserProfile.value?.id === userID) {
+      return {
+        user_id: userID,
+        display_name: currentUserDisplayName.value,
+        avatar_url:
+          currentUserAvatarSyncURL.value ||
+          resolveUserAvatarRawURL(currentUserProfile.value),
+      };
+    }
+
+    return relatedCollaboratorIdentities.value[userID];
+  }
+
+  function resolveUserDisplayName(
+    userProfile: UserInfo | undefined,
+    fallbackUserID?: string,
+  ): string {
+    return (
+      userProfile?.name?.trim() ||
+      userProfile?.username?.trim() ||
+      fallbackUserID ||
+      "未署名"
+    );
+  }
+
+  function resolveCurrentUserID(): string | undefined {
+    return currentUserProfile.value?.id?.trim() || undefined;
+  }
+
+  function resolveUserAvatarRawURL(
+    userProfile: UserInfo | undefined,
+  ): string | undefined {
+    if (!userProfile || userProfile.is_avatar_uploaded === false) {
+      return undefined;
+    }
+
+    return userProfile.avatar_url || userProfile.avatar;
+  }
+
+  function resolveUnitOwnerUserID(
+    projectUnit: LocalProjectUnit,
+    role: UnitOwnerRole,
+  ): string | undefined {
+    return role === "proofread"
+      ? projectUnit.proofreader_id?.trim() || undefined
+      : projectUnit.translator_id?.trim() || undefined;
+  }
+
+  function resolveUnitOwnerUser(
+    projectUnit: LocalProjectUnit,
+    role: UnitOwnerRole,
+  ): UserInfo | undefined {
+    return resolveKnownUserProfile(resolveUnitOwnerUserID(projectUnit, role));
+  }
+
+  function resolveUnitOwnerDisplayName(
+    projectUnit: LocalProjectUnit,
+    role: UnitOwnerRole,
+  ): string {
+    const ownerUserID = resolveUnitOwnerUserID(projectUnit, role);
+    const ownerProfile = resolveUnitOwnerUser(projectUnit, role);
+    if (ownerProfile) {
+      return resolveUserDisplayName(ownerProfile, ownerUserID);
+    }
+
+    return (
+      resolveKnownCollaboratorIdentity(ownerUserID)?.display_name?.trim() ||
+      ownerUserID ||
+      "未署名"
+    );
+  }
+
+  function resolveUnitOwnerAvatarURL(
+    projectUnit: LocalProjectUnit,
+    role: UnitOwnerRole,
+  ): string | undefined {
+    const ownerProfile = resolveUnitOwnerUser(projectUnit, role);
+    const collaboratorIdentity = resolveKnownCollaboratorIdentity(
+      resolveUnitOwnerUserID(projectUnit, role),
+    );
+
     return resolveDisplayAssetUrl(
-      appendCacheBustQueryToUrl(
-        currentUserAvatarRawURL.value,
-        currentUserAvatarVersionToken.value,
+      ownerProfile
+        ? appendCacheBustQueryToUrl(
+            resolveUserAvatarRawURL(ownerProfile),
+            ownerProfile.updated_at,
+          )
+        : collaboratorIdentity?.avatar_url,
+    );
+  }
+
+  function resolveUnitOwnerInitial(
+    projectUnit: LocalProjectUnit,
+    role: UnitOwnerRole,
+  ): string {
+    return (
+      resolveUnitOwnerDisplayName(projectUnit, role)
+        .trim()
+        .charAt(0)
+        .toUpperCase() || "协"
+    );
+  }
+
+  async function ensureUserProfileLoaded(
+    userID: string,
+  ): Promise<UserInfo | null> {
+    const normalizedUserID = userID.trim();
+    if (!normalizedUserID) {
+      return null;
+    }
+
+    const knownUserProfile = resolveKnownUserProfile(normalizedUserID);
+    if (knownUserProfile) {
+      return knownUserProfile;
+    }
+
+    const pendingLoad = pendingRelatedUserProfileLoads.get(normalizedUserID);
+    if (pendingLoad) {
+      return pendingLoad;
+    }
+
+    const nextLoad = getUserProfileByID(normalizedUserID)
+      .then((userProfile) => {
+        setRelatedUserProfile(userProfile);
+        return userProfile;
+      })
+      .catch((error) => {
+        console.warn(
+          "[translator] 加载 unit 归属用户失败:",
+          normalizedUserID,
+          error,
+        );
+        return null;
+      })
+      .finally(() => {
+        pendingRelatedUserProfileLoads.delete(normalizedUserID);
+      });
+
+    pendingRelatedUserProfileLoads.set(normalizedUserID, nextLoad);
+    return nextLoad;
+  }
+
+  async function ensureCurrentPageOwnerProfilesLoaded(
+    units: LocalProjectUnit[],
+  ): Promise<void> {
+    const userIDs = Array.from(
+      new Set(
+        units
+          .flatMap((projectUnit) => {
+            return [projectUnit.translator_id, projectUnit.proofreader_id];
+          })
+          .map((userID) => userID?.trim() || "")
+          .filter((userID): userID is string => Boolean(userID)),
       ),
     );
-  });
 
-  const currentUserInitial = computed(() => {
-    return currentUserDisplayName.value.trim().charAt(0).toUpperCase() || "协";
-  });
+    if (userIDs.length === 0) {
+      return;
+    }
+
+    await Promise.all(userIDs.map((userID) => ensureUserProfileLoaded(userID)));
+  }
+
+  async function ensureOnlineAssignmentProfilesLoaded(
+    targetChapterID: string,
+  ): Promise<void> {
+    const normalizedChapterID = targetChapterID.trim();
+    if (!normalizedChapterID || !authStore.isLoggedIn) {
+      return;
+    }
+
+    const pendingLoad =
+      pendingOnlineAssignmentProfileLoads.get(normalizedChapterID);
+    if (pendingLoad) {
+      return pendingLoad;
+    }
+
+    const nextLoad = getAssignmentList({
+      chapter_id: normalizedChapterID,
+      offset: 0,
+      limit: 100,
+      includes: ["user"],
+    })
+      .then((assignmentList) => {
+        assignmentList.forEach((assignmentInfo) => {
+          if (assignmentInfo.user) {
+            setRelatedUserProfile(assignmentInfo.user);
+          }
+        });
+      })
+      .catch((error) => {
+        console.warn(
+          "[translator] 加载在线章节成员资料失败:",
+          normalizedChapterID,
+          error,
+        );
+      })
+      .finally(() => {
+        pendingOnlineAssignmentProfileLoads.delete(normalizedChapterID);
+      });
+
+    pendingOnlineAssignmentProfileLoads.set(normalizedChapterID, nextLoad);
+    return nextLoad;
+  }
 
   const activeProjectEditors = computed(() => {
     return projectState.value?.page_editors ?? [];
   });
+
+  watch(
+    activeProjectEditors,
+    (pageEditors) => {
+      rememberCollaboratorIdentities(
+        pageEditors.map((pageEditor) => ({
+          user_id: pageEditor.user_id,
+          display_name: pageEditor.display_name,
+          avatar_url: pageEditor.avatar_url,
+        })),
+      );
+    },
+    { immediate: true },
+  );
 
   const currentPageSnapshot = computed<TranslatorPageSnapshot | null>(() => {
     if (!currentPageCollaborationKey.value) {
@@ -478,21 +822,63 @@ export function useTranslatorView() {
             projectPage,
           );
       const pageEditors = pageEditorsByPageKey.value[pageKey] ?? [];
+      const visibleEditors = pageEditors.slice(0, 2);
 
       return {
         value: index,
         label: `第 ${projectPage.index} 页`,
         editors: pageEditors,
+        visibleEditors,
+        hiddenEditorCount: Math.max(
+          pageEditors.length - visibleEditors.length,
+          0,
+        ),
       };
     });
   });
 
-  const footerHintText = computed(() => {
-    if (isCurrentPageLockedByOther.value) {
-      return `${currentPageLockHint.value}，请切换到其他页面继续处理。`;
-    }
+  const currentPageSelectEntry = computed(() => {
+    return pageSelectEntries.value[currentPageIndex.value] ?? null;
+  });
 
-    return "左键：框内 · 右键：框外 · 右键标记：删除 · ↑/↓：切换 · Space：编辑 · Enter：保存 · Shift+Enter：换行 · Esc：退出 · Ctrl+滚轮：缩放";
+  const pageSelectWidthStyle = computed(() => {
+    const currentEntry = currentPageSelectEntry.value;
+    const currentLabel = currentEntry?.label ?? "第 1 页";
+    const avatarCount = currentEntry?.visibleEditors.length ?? 0;
+    const moreBadgeCount = currentEntry?.hiddenEditorCount ? 1 : 0;
+    const estimatedWidth =
+      52 + currentLabel.length * 11 + avatarCount * 18 + moreBadgeCount * 26;
+    const nextWidth = Math.max(104, Math.min(208, estimatedWidth));
+
+    return {
+      width: `${nextWidth}px`,
+    };
+  });
+
+  const shortcutHelpSections = computed<ShortcutHelpSection[]>(() => {
+    return [
+      {
+        title: "标点操作",
+        items: [
+          { keys: "左键", description: "框内落点" },
+          { keys: "右键", description: "框外落点" },
+          { keys: "右键标记", description: "删除标点" },
+          { keys: "Space", description: "编辑标点" },
+        ],
+      },
+      {
+        title: "页面导航",
+        items: [
+          { keys: "Tab", description: "下一个标点" },
+          { keys: "Shift + Tab", description: "上一个标点" },
+          { keys: "Ctrl + ← / →", description: "上一页 / 下一页" },
+        ],
+      },
+    ];
+  });
+
+  const footerHintText = computed(() => {
+    return "左键：框内 · 右键：框外 · 右键标记：删除 · Space：编辑";
   });
 
   const currentPageTranslatedCount = computed(() => {
@@ -569,6 +955,7 @@ export function useTranslatorView() {
           return_workset_id: worksetID || undefined,
           return_comic_id: comicID || undefined,
         });
+        void ensureOnlineAssignmentProfilesLoaded(nextChapterID);
       } catch (error) {
         console.error("[translator] 在线章节初始化失败:", error);
         message.error(
@@ -619,39 +1006,96 @@ export function useTranslatorView() {
         return;
       }
 
-      currentPageUnits.value = cloneUnits(
-        isOnlineWorkspace.value
-          ? await onlineWorkspaceStore.loadPageUnits(
-              chapterID.value,
-              nextPage.id,
-            )
-          : await localProjectsStore.loadProjectPageUnits(
-              projectID.value,
-              nextPage.id,
-            ),
-      );
-      selectedUnitID.value = currentPageUnits.value[0]?.id ?? null;
-      editingUnitID.value = null;
       resetStageTransform();
-      void syncCurrentPageCollaborationSession();
-
+      currentPageUnits.value = [];
+      selectedUnitID.value = null;
+      editingUnitID.value = null;
+      currentPageImageURL.value = null;
       imageLoading.value = true;
       const resolveToken = ++currentImageResolveToken;
 
-      let resolvedURL: string | null = null;
-
       try {
-        resolvedURL = await resolveLocalProjectImageURL(nextPage.image_source);
-      } catch (err) {
-        console.error("[translator] 图片解析失败:", nextPage.image_source, err);
-      }
+        let resolvedPage = nextPage;
 
-      if (resolveToken !== currentImageResolveToken) {
-        return;
-      }
+        if (isOnlineWorkspace.value) {
+          const cachedPage = await onlineWorkspaceStore.ensurePageImageCached(
+            chapterID.value,
+            nextPage.id,
+          );
 
-      currentPageImageURL.value = resolvedURL;
-      imageLoading.value = false;
+          if (cachedPage) {
+            resolvedPage = cachedPage;
+          }
+        }
+
+        const nextUnits = cloneUnits(
+          isOnlineWorkspace.value
+            ? await onlineWorkspaceStore.loadPageUnits(
+                chapterID.value,
+                nextPage.id,
+              )
+            : await localProjectsStore.loadProjectPageUnits(
+                projectID.value,
+                nextPage.id,
+              ),
+        );
+
+        if (resolveToken !== currentImageResolveToken) {
+          return;
+        }
+
+        currentPageUnits.value = nextUnits;
+        selectedUnitID.value = nextUnits[0]?.id ?? null;
+        editingUnitID.value = null;
+
+        if (isOnlineWorkspace.value) {
+          void ensureOnlineAssignmentProfilesLoaded(chapterID.value);
+        }
+
+        void ensureCurrentPageOwnerProfilesLoaded(nextUnits);
+        void syncCurrentPageCollaborationSession();
+
+        let resolvedURL: string | null = null;
+
+        try {
+          resolvedURL = await resolveLocalProjectImageURL(
+            resolvedPage.image_source,
+          );
+        } catch (err) {
+          console.error(
+            "[translator] 图片解析失败:",
+            resolvedPage.image_source,
+            err,
+          );
+        }
+
+        if (resolveToken !== currentImageResolveToken) {
+          return;
+        }
+
+        currentPageImageURL.value = resolvedURL;
+        imageLoading.value = false;
+
+        if (isOnlineWorkspace.value) {
+          onlineWorkspaceStore.schedulePagePrefetch(
+            chapterID.value,
+            currentPageIndex.value,
+          );
+        }
+      } catch (error) {
+        console.error("[translator] 页面加载失败:", error);
+
+        if (resolveToken !== currentImageResolveToken) {
+          return;
+        }
+
+        currentPageUnits.value = [];
+        selectedUnitID.value = null;
+        editingUnitID.value = null;
+        currentPageImageURL.value = null;
+        imageLoading.value = false;
+        message.error(error instanceof Error ? error.message : "页面加载失败");
+      }
     },
     { immediate: true },
   );
@@ -695,6 +1139,14 @@ export function useTranslatorView() {
     if (!nextSnapshot) {
       return;
     }
+
+    rememberCollaboratorIdentity({
+      user_id: nextSnapshot.updated_by_user_id,
+      display_name: nextSnapshot.updated_by_display_name,
+      avatar_url: resolveKnownCollaboratorIdentity(
+        nextSnapshot.updated_by_user_id,
+      )?.avatar_url,
+    });
 
     if (
       nextSnapshot.updated_by_user_id === currentUserProfile.value?.id &&
@@ -740,6 +1192,19 @@ export function useTranslatorView() {
     };
   }
 
+  function resolveOwnershipPatch(
+    role: UnitOwnerRole,
+  ): Pick<LocalProjectUnit, "translator_id" | "proofreader_id"> {
+    const currentUserID = resolveCurrentUserID();
+    if (!currentUserID) {
+      return {};
+    }
+
+    return role === "proofread"
+      ? { proofreader_id: currentUserID }
+      : { translator_id: currentUserID };
+  }
+
   /**
    * 统一应用远端页面快照，并同步回本地持久化层。
    */
@@ -754,6 +1219,7 @@ export function useTranslatorView() {
 
     const nextUnits = cloneUnits(snapshot.units);
     currentPageUnits.value = nextUnits;
+    void ensureCurrentPageOwnerProfilesLoaded(nextUnits);
 
     if (isOnlineWorkspace.value) {
       onlineWorkspaceStore.replaceRuntimePageUnits(
@@ -1087,6 +1553,7 @@ export function useTranslatorView() {
       translated_text: "",
       proofread_text: "",
       translator_comment: "",
+      translator_id: resolveCurrentUserID(),
       proofreader_comment: "",
       revision: 1,
       last_edited_by: currentUserDisplayName.value,
@@ -1173,6 +1640,9 @@ export function useTranslatorView() {
       }
 
       return buildTouchedUnit(projectUnit, {
+        ...resolveOwnershipPatch(
+          field === "proofread_text" ? "proofread" : "translate",
+        ),
         [field]: nextValue,
       } as Partial<LocalProjectUnit>);
     });
@@ -1317,6 +1787,7 @@ export function useTranslatorView() {
       }
 
       return buildTouchedUnit(projectUnit, {
+        ...resolveOwnershipPatch("proofread"),
         is_proofread: !projectUnit.is_proofread,
       });
     });
@@ -1786,6 +2257,16 @@ export function useTranslatorView() {
 
     try {
       currentUserProfile.value = await getCurrentUserProfile();
+      if (currentUserProfile.value) {
+        setRelatedUserProfile(currentUserProfile.value);
+        rememberCollaboratorIdentity({
+          user_id: currentUserProfile.value.id,
+          display_name: currentUserDisplayName.value,
+          avatar_url:
+            currentUserAvatarSyncURL.value ||
+            resolveUserAvatarRawURL(currentUserProfile.value),
+        });
+      }
     } catch {
       currentUserProfile.value = null;
     }
@@ -1871,6 +2352,26 @@ export function useTranslatorView() {
           : "已切换到校对模式",
       );
       return;
+    }
+
+    if (
+      event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.shiftKey &&
+      !isShortcutBlocked
+    ) {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        moveToPreviousPage();
+        return;
+      }
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        moveToNextPage();
+        return;
+      }
     }
 
     if (
@@ -1970,11 +2471,16 @@ export function useTranslatorView() {
     resolveCollaboratorTooltip,
     resolveDisplayAssetUrl,
     resolveCollaboratorAvatarInitial,
+    resolveUnitOwnerAvatarURL,
+    resolveUnitOwnerInitial,
+    resolveUnitOwnerDisplayName,
     currentPageMeta,
     currentPageIndex,
     moveToPreviousPage,
     handlePageSelectChange,
     pageSelectEntries,
+    pageSelectWidthStyle,
+    shortcutHelpSections,
     currentPageStatusText,
     isCurrentPageLockedByOther,
     moveToNextPage,
@@ -2009,9 +2515,6 @@ export function useTranslatorView() {
     isUnitProofread,
     currentPageCanMutateStructure,
     toggleSelectedUnitBubble,
-    currentUserAvatarURL,
-    currentUserInitial,
-    currentUserDisplayName,
     currentPageCanEditTranslate,
     handleUnitFieldFocus,
     handleUnitFieldBlur,

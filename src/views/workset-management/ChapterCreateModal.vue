@@ -73,6 +73,7 @@
 
       <a-form-item label="底图上传" required>
         <a-upload-dragger
+          class="chapter-upload-dragger"
           accept=".jpg,.jpeg,.png,.webp"
           :multiple="true"
           :before-upload="handleBeforeUpload"
@@ -80,11 +81,12 @@
           @remove="handleRemove"
         >
           <p class="ant-upload-drag-icon">
-            <InboxOutlined style="color: var(--color-primary)" />
+            <InboxOutlined style="color: var(--brand-primary)" />
           </p>
           <p class="ant-upload-text">点击或拖拽上传本话全部原始图片</p>
           <p class="ant-upload-hint">
-            当前链路要求整批图片使用同一种扩展名，支持 jpg、png、webp。
+            当前链路要求整批图片使用同一种扩展名，支持
+            jpg、png、webp，上传时会按文件名自然排序。
           </p>
         </a-upload-dragger>
 
@@ -199,6 +201,17 @@ watch(
   },
 );
 
+function sortSelectedUploadFiles(
+  fileItems: Array<{ uid: string; file: File }>,
+): Array<{ uid: string; file: File }> {
+  return [...fileItems].sort((leftFile, rightFile) => {
+    return leftFile.file.name.localeCompare(rightFile.file.name, "zh-CN", {
+      numeric: true,
+      sensitivity: "base",
+    });
+  });
+}
+
 const handleBeforeUpload: UploadProps["beforeUpload"] = (rawFile) => {
   const normalizedFile = rawFile as File;
   if (!resolveSupportedImageExtension(normalizedFile)) {
@@ -206,13 +219,13 @@ const handleBeforeUpload: UploadProps["beforeUpload"] = (rawFile) => {
     return false;
   }
 
-  selectedFiles.value = [
+  selectedFiles.value = sortSelectedUploadFiles([
     ...selectedFiles.value,
     {
       uid: rawFile.uid,
       file: normalizedFile,
     },
-  ];
+  ]);
 
   return false;
 };
@@ -246,7 +259,9 @@ function resetUploadProgress(): void {
 }
 
 function getSelectedFiles(): File[] {
-  return selectedFiles.value.map((fileItem) => fileItem.file);
+  return sortSelectedUploadFiles(selectedFiles.value).map(
+    (fileItem) => fileItem.file,
+  );
 }
 
 function resolveSupportedImageExtension(file: File): string | null {
@@ -411,7 +426,7 @@ async function handleSubmit(): Promise<void> {
 
 .chapter-upload-summary {
   margin-top: 12px;
-  color: var(--color-on-surface-variant, #64748b);
+  color: var(--text-muted, #64748b);
   font-size: 12px;
 }
 
@@ -419,12 +434,12 @@ async function handleSubmit(): Promise<void> {
   margin-top: 14px;
   padding: 12px 14px;
   border: 1px solid
-    color-mix(in srgb, var(--color-border, #dbe5f0) 82%, transparent);
+    color-mix(in srgb, var(--panel-border, #dbe5f0) 82%, transparent);
   border-radius: 12px;
   background: color-mix(
     in srgb,
-    var(--color-bg-elevated, #f8fafc) 90%,
-    white 10%
+    var(--panel-bg, #f8fafc) 92%,
+    var(--surface, white) 8%
   );
 }
 
@@ -434,13 +449,13 @@ async function handleSubmit(): Promise<void> {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
-  color: var(--color-text, #0f172a);
+  color: var(--text-primary, #0f172a);
   font-size: 13px;
 }
 
 .chapter-upload-progress__hint {
   margin-top: 10px;
-  color: var(--color-on-surface-variant, #64748b);
+  color: var(--text-muted, #64748b);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -449,17 +464,17 @@ async function handleSubmit(): Promise<void> {
   margin-bottom: 16px;
   padding: 14px 16px;
   border: 1px solid
-    color-mix(in srgb, var(--color-border, #dbe5f0) 82%, transparent);
+    color-mix(in srgb, var(--panel-border, #dbe5f0) 82%, transparent);
   border-radius: 12px;
   background: color-mix(
     in srgb,
-    var(--color-bg-elevated, #f8fafc) 88%,
-    white 12%
+    var(--panel-bg, #f8fafc) 90%,
+    var(--surface, white) 10%
   );
 }
 
 .chapter-default-role-panel__title {
-  color: var(--color-text-secondary, #475569);
+  color: var(--text-muted, #475569);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -474,30 +489,114 @@ async function handleSubmit(): Promise<void> {
 .chapter-default-role-panel__item {
   padding: 10px 12px;
   border-radius: 10px;
+  border: 1px solid
+    color-mix(in srgb, var(--panel-border, #dbe5f0) 60%, transparent);
   background: color-mix(
     in srgb,
-    var(--color-bg-container, white) 90%,
-    transparent
+    var(--surface, white) 84%,
+    var(--panel-bg, #f8fafc) 16%
   );
 }
 
 .chapter-default-role-panel__label {
-  color: var(--color-text-secondary, #64748b);
+  color: var(--text-muted, #64748b);
   font-size: 12px;
 }
 
 .chapter-default-role-panel__value {
   margin-top: 4px;
-  color: var(--color-text, #0f172a);
+  color: var(--text-primary, #0f172a);
   font-size: 13px;
   font-weight: 600;
 }
 
 .chapter-form-hint {
   margin-top: 8px;
-  color: var(--color-on-surface-variant, #64748b);
+  color: var(--text-muted, #64748b);
   font-size: 12px;
   line-height: 1.6;
+}
+
+:deep(.chapter-upload-dragger.ant-upload-wrapper .ant-upload-drag) {
+  border-radius: 14px;
+  border-color: color-mix(
+    in srgb,
+    var(--panel-border, #dbe5f0) 78%,
+    transparent
+  );
+  background: color-mix(
+    in srgb,
+    var(--panel-bg, #f8fafc) 90%,
+    var(--surface, white) 10%
+  );
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+:deep(.chapter-upload-dragger.ant-upload-wrapper:hover .ant-upload-drag),
+:deep(.chapter-upload-dragger.ant-upload-wrapper .ant-upload-drag-hover) {
+  border-color: var(--control-btn-primary-border, #9b73f2);
+  background: color-mix(
+    in srgb,
+    var(--panel-bg, #f8fafc) 80%,
+    var(--control-btn-primary-border, #9b73f2) 20%
+  );
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+:deep(.chapter-upload-dragger.ant-upload-wrapper .ant-upload-btn) {
+  padding: 24px 20px;
+}
+
+:deep(.chapter-upload-dragger.ant-upload-wrapper .ant-upload-drag-icon) {
+  margin-bottom: 10px;
+}
+
+:deep(.chapter-upload-dragger.ant-upload-wrapper .ant-upload-text) {
+  color: var(--text-primary, #0f172a);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+:deep(.chapter-upload-dragger.ant-upload-wrapper .ant-upload-hint) {
+  color: var(--text-muted, #64748b);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+:deep(.chapter-upload-dragger.ant-upload-wrapper .ant-upload-list-item) {
+  margin-top: 10px;
+  border-radius: 10px;
+  border: 1px solid
+    color-mix(in srgb, var(--panel-border, #dbe5f0) 72%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--panel-bg, #f8fafc) 92%,
+    var(--surface, white) 8%
+  );
+}
+
+:deep(.chapter-upload-dragger.ant-upload-wrapper .ant-upload-list-item-name),
+:deep(
+  .chapter-upload-dragger.ant-upload-wrapper .ant-upload-list-item-actions
+) {
+  color: var(--text-primary, #0f172a);
+}
+
+:deep(
+  .chapter-upload-dragger.ant-upload-wrapper
+    .ant-upload-list-item-card-actions-btn
+) {
+  color: var(--text-muted, #64748b);
+}
+
+:deep(
+  .chapter-upload-dragger.ant-upload-wrapper
+    .ant-upload-list-item-card-actions-btn:hover
+) {
+  color: var(--text-primary, #0f172a);
 }
 
 @media (max-width: 640px) {

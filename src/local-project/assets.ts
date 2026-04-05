@@ -306,5 +306,9 @@ export async function resolveLocalProjectImageURL(
     return toElectronFileURL(imageSource.path);
   }
 
+  if (imageSource.kind === "web-remote") {
+    return null;
+  }
+
   return loadWebProjectImageAsset(imageSource.asset_id);
 }

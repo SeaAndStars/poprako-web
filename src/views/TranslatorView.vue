@@ -43,6 +43,69 @@
       </div>
 
       <div v-if="currentPageMeta" class="translator-header__right">
+        <a-dropdown
+          placement="bottomLeft"
+          :trigger="['click']"
+          overlay-class-name="translator-shortcuts-dropdown"
+        >
+          <a-button
+            size="small"
+            class="translator-header__shortcut-trigger"
+            title="查看快捷键"
+            aria-label="查看快捷键"
+          >
+            <template #icon>
+              <QuestionCircleOutlined />
+            </template>
+          </a-button>
+
+          <template #overlay>
+            <div class="translator-shortcuts-card" @click.stop>
+              <div class="translator-shortcuts-card__title">快捷键</div>
+              <div class="translator-shortcuts-card__subtitle">
+                只显示常用操作，其他兼容快捷键仍可使用。
+              </div>
+
+              <section
+                v-for="section in shortcutHelpSections"
+                :key="section.title"
+                class="translator-shortcuts-card__section"
+              >
+                <div class="translator-shortcuts-card__section-title">
+                  {{ section.title }}
+                </div>
+                <div
+                  v-for="shortcut in section.items"
+                  :key="`${section.title}-${shortcut.keys}`"
+                  class="translator-shortcuts-card__item"
+                >
+                  <div class="translator-shortcuts-card__keys">
+                    <template
+                      v-for="(token, tokenIndex) in tokenizeShortcutKeys(
+                        shortcut.keys,
+                      )"
+                      :key="`${shortcut.keys}-${token.value}-${tokenIndex}`"
+                    >
+                      <kbd
+                        v-if="token.kind === 'key'"
+                        class="translator-shortcuts-card__keycap"
+                      >
+                        {{ token.value }}
+                      </kbd>
+                      <span v-else class="translator-shortcuts-card__separator">
+                        {{ token.value }}
+                      </span>
+                    </template>
+                  </div>
+                  <span class="translator-shortcuts-card__description">
+                    {{ shortcut.description }}
+                  </span>
+                </div>
+              </section>
+            </div>
+          </template>
+        </a-dropdown>
+
         <a-button
           :disabled="currentPageIndex <= 0"
           size="small"
@@ -51,45 +114,55 @@
           &lt;
         </a-button>
 
-        <a-select
-          class="translator-header__page-select"
-          :value="currentPageIndex"
-          size="small"
-          @change="handlePageSelectChange"
-        >
-          <a-select-option
-            v-for="pageOption in pageSelectEntries"
-            :key="pageOption.value"
-            :value="pageOption.value"
+        <div class="translator-header__page-picker-group">
+          <a-select
+            class="translator-header__page-select"
+            :style="pageSelectWidthStyle"
+            :value="currentPageIndex"
+            size="small"
+            @change="handlePageSelectChange"
           >
-            <div class="translator-header__page-option">
-              <span class="translator-header__page-option-label">
-                {{ pageOption.label }}
-              </span>
-              <div
-                v-if="pageOption.editors.length > 0"
-                class="translator-header__page-option-avatars"
-              >
-                <a-tooltip
-                  v-for="pageEditor in pageOption.editors"
-                  :key="resolvePageEditorKey(pageEditor)"
-                  :title="resolveCollaboratorTooltip(pageEditor)"
-                  placement="left"
+            <a-select-option
+              v-for="pageOption in pageSelectEntries"
+              :key="pageOption.value"
+              :value="pageOption.value"
+            >
+              <div class="translator-header__page-option">
+                <span class="translator-header__page-option-label">
+                  {{ pageOption.label }}
+                </span>
+                <div
+                  v-if="pageOption.visibleEditors.length > 0"
+                  class="translator-header__page-option-avatars"
                 >
-                  <a-avatar
-                    :size="18"
-                    :src="
-                      resolveDisplayAssetUrl(pageEditor.avatar_url) || undefined
-                    "
-                    class="translator-header__page-option-avatar"
+                  <a-tooltip
+                    v-for="pageEditor in pageOption.visibleEditors"
+                    :key="resolvePageEditorKey(pageEditor)"
+                    :title="resolveCollaboratorTooltip(pageEditor)"
+                    placement="left"
                   >
-                    {{ resolveCollaboratorAvatarInitial(pageEditor) }}
-                  </a-avatar>
-                </a-tooltip>
+                    <a-avatar
+                      :size="18"
+                      :src="
+                        resolveDisplayAssetUrl(pageEditor.avatar_url) ||
+                        undefined
+                      "
+                      class="translator-header__page-option-avatar"
+                    >
+                      {{ resolveCollaboratorAvatarInitial(pageEditor) }}
+                    </a-avatar>
+                  </a-tooltip>
+                  <span
+                    v-if="pageOption.hiddenEditorCount > 0"
+                    class="translator-header__page-option-more"
+                  >
+                    +{{ pageOption.hiddenEditorCount }}
+                  </span>
+                </div>
               </div>
-            </div>
-          </a-select-option>
-        </a-select>
+            </a-select-option>
+          </a-select>
+        </div>
 
         <span class="translator-header__page-total">
           共 {{ projectRecord.page_count }} 页
@@ -281,16 +354,23 @@
                         <a-avatar
                           :size="18"
                           class="translator-unit-card__section-avatar is-translate"
-                          :src="currentUserAvatarURL || undefined"
+                          :src="
+                            resolveUnitOwnerAvatarURL(
+                              projectUnit,
+                              'translate',
+                            ) || undefined
+                          "
                         >
-                          {{ currentUserInitial }}
+                          {{
+                            resolveUnitOwnerInitial(projectUnit, "translate")
+                          }}
                         </a-avatar>
                         <span class="translator-unit-card__section-label"
                           >翻译</span
                         >
                       </div>
                       <span class="translator-unit-card__section-name">{{
-                        currentUserDisplayName
+                        resolveUnitOwnerDisplayName(projectUnit, "translate")
                       }}</span>
                     </div>
                     <span
@@ -308,16 +388,23 @@
                         <a-avatar
                           :size="18"
                           class="translator-unit-card__section-avatar is-proofread"
-                          :src="currentUserAvatarURL || undefined"
+                          :src="
+                            resolveUnitOwnerAvatarURL(
+                              projectUnit,
+                              'proofread',
+                            ) || undefined
+                          "
                         >
-                          {{ currentUserInitial }}
+                          {{
+                            resolveUnitOwnerInitial(projectUnit, "proofread")
+                          }}
                         </a-avatar>
                         <span class="translator-unit-card__section-label"
                           >校对</span
                         >
                       </div>
                       <span class="translator-unit-card__section-name">{{
-                        currentUserDisplayName
+                        resolveUnitOwnerDisplayName(projectUnit, "proofread")
                       }}</span>
                     </div>
                     <span
@@ -332,16 +419,19 @@
                       <a-avatar
                         :size="18"
                         class="translator-unit-card__section-avatar is-translate"
-                        :src="currentUserAvatarURL || undefined"
+                        :src="
+                          resolveUnitOwnerAvatarURL(projectUnit, 'translate') ||
+                          undefined
+                        "
                       >
-                        {{ currentUserInitial }}
+                        {{ resolveUnitOwnerInitial(projectUnit, "translate") }}
                       </a-avatar>
                       <span class="translator-unit-card__section-label"
                         >翻译</span
                       >
                     </div>
                     <span class="translator-unit-card__section-name">{{
-                      currentUserDisplayName
+                      resolveUnitOwnerDisplayName(projectUnit, "translate")
                     }}</span>
                   </div>
                   <span
@@ -366,16 +456,19 @@
                       <a-avatar
                         :size="18"
                         class="translator-unit-card__section-avatar is-translate"
-                        :src="currentUserAvatarURL || undefined"
+                        :src="
+                          resolveUnitOwnerAvatarURL(projectUnit, 'translate') ||
+                          undefined
+                        "
                       >
-                        {{ currentUserInitial }}
+                        {{ resolveUnitOwnerInitial(projectUnit, "translate") }}
                       </a-avatar>
                       <span class="translator-unit-card__section-label"
                         >翻译</span
                       >
                     </div>
                     <span class="translator-unit-card__section-name">{{
-                      currentUserDisplayName
+                      resolveUnitOwnerDisplayName(projectUnit, "translate")
                     }}</span>
                   </div>
                   <div class="translator-unit-card__field-content">
@@ -422,16 +515,19 @@
                       <a-avatar
                         :size="18"
                         class="translator-unit-card__section-avatar is-proofread"
-                        :src="currentUserAvatarURL || undefined"
+                        :src="
+                          resolveUnitOwnerAvatarURL(projectUnit, 'proofread') ||
+                          undefined
+                        "
                       >
-                        {{ currentUserInitial }}
+                        {{ resolveUnitOwnerInitial(projectUnit, "proofread") }}
                       </a-avatar>
                       <span class="translator-unit-card__section-label"
                         >校对</span
                       >
                     </div>
                     <span class="translator-unit-card__section-name">{{
-                      currentUserDisplayName
+                      resolveUnitOwnerDisplayName(projectUnit, "proofread")
                     }}</span>
                   </div>
                   <div class="translator-unit-card__field-content">
@@ -574,9 +670,25 @@
   </div>
 </template>
 
-
 <script setup lang="ts">
+import { QuestionCircleOutlined } from "@ant-design/icons-vue";
 import { useTranslatorView } from "./useTranslatorView";
+
+type ShortcutKeyToken = {
+  kind: "key" | "separator";
+  value: string;
+};
+
+function tokenizeShortcutKeys(keys: string): ShortcutKeyToken[] {
+  return keys
+    .split(/(\s+\+\s+|\s+\/\s+)/g)
+    .map((token) => token.trim())
+    .filter(Boolean)
+    .map((token) => ({
+      kind: token === "+" || token === "/" ? "separator" : "key",
+      value: token,
+    }));
+}
 
 const {
   projectRecord,
@@ -589,11 +701,16 @@ const {
   resolveCollaboratorTooltip,
   resolveDisplayAssetUrl,
   resolveCollaboratorAvatarInitial,
+  resolveUnitOwnerAvatarURL,
+  resolveUnitOwnerInitial,
+  resolveUnitOwnerDisplayName,
   currentPageMeta,
   currentPageIndex,
   moveToPreviousPage,
   handlePageSelectChange,
   pageSelectEntries,
+  pageSelectWidthStyle,
+  shortcutHelpSections,
   currentPageStatusText,
   isCurrentPageLockedByOther,
   moveToNextPage,
@@ -628,9 +745,6 @@ const {
   isUnitProofread,
   currentPageCanMutateStructure,
   toggleSelectedUnitBubble,
-  currentUserAvatarURL,
-  currentUserInitial,
-  currentUserDisplayName,
   currentPageCanEditTranslate,
   handleUnitFieldFocus,
   handleUnitFieldBlur,
@@ -651,7 +765,6 @@ const {
   isWorkspaceLoading,
   workspaceLoadingTip,
   workspaceEmptyDescription,
-
 } = useTranslatorView();
 </script>
 

@@ -58,6 +58,7 @@
 
       <a-form-item label="封面 (可选)">
         <a-upload-dragger
+          class="workset-upload-dragger"
           accept="image/*"
           :multiple="false"
           :max-count="1"
@@ -66,7 +67,7 @@
           @remove="handleCoverRemove"
         >
           <p class="ant-upload-drag-icon">
-            <InboxOutlined style="color: var(--color-primary)" />
+            <InboxOutlined style="color: var(--brand-primary)" />
           </p>
           <p class="ant-upload-text">点击或拖拽封面图片到这里</p>
           <p class="ant-upload-hint">支持 jpg、png、webp，创建后会自动上传。</p>
@@ -371,3 +372,87 @@ function handleCancel() {
   emit("update:open", false);
 }
 </script>
+
+<style scoped lang="scss">
+:deep(.workset-upload-dragger.ant-upload-wrapper .ant-upload-drag) {
+  border-radius: 14px;
+  border-color: color-mix(
+    in srgb,
+    var(--panel-border, #dbe5f0) 78%,
+    transparent
+  );
+  background: color-mix(
+    in srgb,
+    var(--panel-bg, #f8fafc) 90%,
+    var(--surface, white) 10%
+  );
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+:deep(.workset-upload-dragger.ant-upload-wrapper:hover .ant-upload-drag),
+:deep(.workset-upload-dragger.ant-upload-wrapper .ant-upload-drag-hover) {
+  border-color: var(--control-btn-primary-border, #9b73f2);
+  background: color-mix(
+    in srgb,
+    var(--panel-bg, #f8fafc) 80%,
+    var(--control-btn-primary-border, #9b73f2) 20%
+  );
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+:deep(.workset-upload-dragger.ant-upload-wrapper .ant-upload-btn) {
+  padding: 24px 20px;
+}
+
+:deep(.workset-upload-dragger.ant-upload-wrapper .ant-upload-drag-icon) {
+  margin-bottom: 10px;
+}
+
+:deep(.workset-upload-dragger.ant-upload-wrapper .ant-upload-text) {
+  color: var(--text-primary, #0f172a);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+:deep(.workset-upload-dragger.ant-upload-wrapper .ant-upload-hint) {
+  color: var(--text-muted, #64748b);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+:deep(.workset-upload-dragger.ant-upload-wrapper .ant-upload-list-item) {
+  margin-top: 10px;
+  border-radius: 10px;
+  border: 1px solid
+    color-mix(in srgb, var(--panel-border, #dbe5f0) 72%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--panel-bg, #f8fafc) 92%,
+    var(--surface, white) 8%
+  );
+}
+
+:deep(.workset-upload-dragger.ant-upload-wrapper .ant-upload-list-item-name),
+:deep(
+  .workset-upload-dragger.ant-upload-wrapper .ant-upload-list-item-actions
+) {
+  color: var(--text-primary, #0f172a);
+}
+
+:deep(
+  .workset-upload-dragger.ant-upload-wrapper
+    .ant-upload-list-item-card-actions-btn
+) {
+  color: var(--text-muted, #64748b);
+}
+
+:deep(
+  .workset-upload-dragger.ant-upload-wrapper
+    .ant-upload-list-item-card-actions-btn:hover
+) {
+  color: var(--text-primary, #0f172a);
+}
+</style>
