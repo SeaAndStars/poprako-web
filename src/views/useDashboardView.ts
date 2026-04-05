@@ -5,16 +5,28 @@ import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { Modal, message } from "ant-design-vue";
 import { storeToRefs } from "pinia";
-import { getMyAssignments } from "../api/modules";
+import { exportChapterManuscript, getMyAssignments } from "../api/modules";
 import { useLocalProjectsStore } from "../stores/localProjects";
 import type { AssignmentInfo } from "../types/domain";
 
 export type WorkspaceParticipationMode = "translate" | "proofread";
+type WorkspaceParticipationRoleMode = WorkspaceParticipationMode | "typeset";
+type WorkspaceEnterRole = WorkspaceParticipationRole & {
+  mode: WorkspaceParticipationMode;
+  entersWorkspace: true;
+};
 
 interface WorkspaceParticipationRole {
-  mode: WorkspaceParticipationMode;
+  mode: WorkspaceParticipationRoleMode;
   label: string;
   assignedAt?: number;
+  entersWorkspace: boolean;
+}
+
+function isWorkspaceEnterRole(
+  role: WorkspaceParticipationRole,
+): role is WorkspaceEnterRole {
+  return role.entersWorkspace && role.mode !== "typeset";
 }
 
 export interface WorkspaceParticipationEntry {
@@ -33,6 +45,7 @@ export interface WorkspaceParticipationEntry {
   pendingTranslateUnitCount: number;
   pendingProofreadUnitCount: number;
   roles: WorkspaceParticipationRole[];
+  canDownloadManuscript: boolean;
   lastActiveAt?: number;
 }
 
@@ -53,6 +66,7 @@ function resolveParticipationRoles(
       mode: "translate",
       label: "翻译",
       assignedAt: assignmentInfo.assigned_translator_at,
+      entersWorkspace: true,
     });
   }
 
@@ -61,6 +75,16 @@ function resolveParticipationRoles(
       mode: "proofread",
       label: "校对",
       assignedAt: assignmentInfo.assigned_proofreader_at,
+      entersWorkspace: true,
+    });
+  }
+
+  if (assignmentInfo.assigned_typesetter_at) {
+    roles.push({
+      mode: "typeset",
+      label: "嵌字",
+      assignedAt: assignmentInfo.assigned_typesetter_at,
+      entersWorkspace: false,
     });
   }
 
@@ -97,6 +121,7 @@ export function useDashboardView() {
   const onlineAssignmentsLoading = ref(false);
   const onlineAssignmentsErrorMessage = ref("");
   const myAssignments = ref<AssignmentInfo[]>([]);
+  const downloadingChapterIDs = ref<Record<string, boolean>>({});
 
   const normalizedSearchKeyword = computed(() =>
     searchKeyword.value.trim().toLowerCase(),
@@ -185,6 +210,7 @@ export function useDashboardView() {
         translatedUnitCount: chapterInfo.translated_unit_count ?? 0,
         proofreadUnitCount: chapterInfo.proofread_unit_count ?? 0,
         roles: [],
+        canDownloadManuscript: false,
         lastActiveAt: undefined,
       };
 
@@ -226,12 +252,17 @@ export function useDashboardView() {
       }
 
       existingEntry.roles.sort((leftRole, rightRole) => {
-        return leftRole.mode === rightRole.mode
-          ? 0
-          : leftRole.mode === "translate"
-            ? -1
-            : 1;
+        const roleOrder: Record<WorkspaceParticipationRoleMode, number> = {
+          translate: 0,
+          proofread: 1,
+          typeset: 2,
+        };
+
+        return roleOrder[leftRole.mode] - roleOrder[rightRole.mode];
       });
+      existingEntry.canDownloadManuscript = existingEntry.roles.some(
+        (entryRole) => entryRole.mode === "typeset",
+      );
 
       participationsByChapter.set(assignmentInfo.chapter_id, existingEntry);
     }
@@ -382,6 +413,44 @@ export function useDashboardView() {
     });
   }
 
+  function resolveManuscriptFileName(
+    chapterEntry: WorkspaceParticipationEntry,
+  ): string {
+    const rawFileName = `${chapterEntry.comicTitle}-${chapterEntry.chapterLabel}-译稿.txt`;
+    return rawFileName.replace(/[\\/:*?"<>|]/g, "_");
+  }
+
+  async function handleDownloadChapterManuscript(
+    chapterEntry: WorkspaceParticipationEntry,
+  ): Promise<void> {
+    if (!chapterEntry.canDownloadManuscript) {
+      return;
+    }
+
+    downloadingChapterIDs.value = {
+      ...downloadingChapterIDs.value,
+      [chapterEntry.chapterId]: true,
+    };
+
+    try {
+      const chapterBlob = await exportChapterManuscript(chapterEntry.chapterId);
+      const objectURL = URL.createObjectURL(chapterBlob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = objectURL;
+      downloadLink.download = resolveManuscriptFileName(chapterEntry);
+      downloadLink.click();
+      URL.revokeObjectURL(objectURL);
+      message.success("译稿已开始下载");
+    } catch (error: unknown) {
+      message.error(error instanceof Error ? error.message : "译稿下载失败");
+    } finally {
+      downloadingChapterIDs.value = {
+        ...downloadingChapterIDs.value,
+        [chapterEntry.chapterId]: false,
+      };
+    }
+  }
+
   function handleProjectCreated(projectID: string): void {
     createModalOpen.value = false;
     handleOpenProject(projectID);
@@ -419,7 +488,9 @@ export function useDashboardView() {
     filteredProjects,
     formatParticipationTimestamp,
     handleDeleteProject,
+    handleDownloadChapterManuscript,
     handleOpenOnlineChapter,
+    isWorkspaceEnterRole,
     handleOpenProject,
     handleProjectCreated,
     loadMyOnlineAssignments,
@@ -428,6 +499,7 @@ export function useDashboardView() {
     onlineAssignmentsLoading,
     onlineParticipationEmptyText,
     onlineParticipations,
+    downloadingChapterIDs,
     projects,
     searchKeyword,
     summaryCards,

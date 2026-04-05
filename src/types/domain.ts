@@ -445,6 +445,8 @@ export interface PageInfo {
   total_unit_count?: number;
   translated_unit_count?: number;
   proofread_unit_count?: number;
+  /** 页面翻译确认完成时间。 */
+  translated_at?: UnixTimestamp;
 
   /** 创建时间。 */
   created_at?: UnixTimestamp;

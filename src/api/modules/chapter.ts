@@ -92,6 +92,11 @@ export type GetChapterListResponse = ChapterInfo[];
 export type UpdateChapterResponse = void;
 
 /**
+ * 导出章节译稿响应类型。
+ */
+export type ExportChapterManuscriptResponse = Blob;
+
+/**
  * 删除章节响应类型。
  */
 export type DeleteChapterResponse = void;
@@ -145,4 +150,13 @@ export async function deleteChapter(
   chapterID: string,
 ): Promise<DeleteChapterResponse> {
   await httpClient.delete<DeleteChapterResponse>(`/chapters/${chapterID}`);
+}
+
+/**
+ * 导出章节译稿，对应 GET /chapters/{chapter_id}/manuscript.txt。
+ */
+export async function exportChapterManuscript(
+  chapterID: string,
+): Promise<ExportChapterManuscriptResponse> {
+  return httpClient.getBlob(`/chapters/${chapterID}/manuscript.txt`);
 }

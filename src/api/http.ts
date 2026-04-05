@@ -159,6 +159,42 @@ class ApiHttpClient {
   }
 
   /**
+   * 发送返回二进制内容的 GET 请求。
+   */
+  public async getBlob(url: string, params?: object): Promise<Blob> {
+    const response = await this.instance.request<Blob>({
+      url,
+      method: "GET",
+      params,
+      paramsSerializer: (queryParams) => this.serializeQuery(queryParams),
+      responseType: "blob",
+      validateStatus: () => true,
+    });
+
+    if (response.status >= 200 && response.status < 300) {
+      return response.data;
+    }
+
+    const responseContentType = response.headers["content-type"];
+    if (typeof responseContentType === "string") {
+      const normalizedContentType = responseContentType.toLowerCase();
+      if (normalizedContentType.includes("application/json")) {
+        const responseText = await response.data.text();
+        try {
+          const responseBody = JSON.parse(responseText) as ApiResponseEnvelope<
+            unknown
+          >;
+          throw new Error(responseBody.message || "请求失败");
+        } catch {
+          throw new Error(responseText || "请求失败");
+        }
+      }
+    }
+
+    throw new Error(`请求失败 (${response.status})`);
+  }
+
+  /**
    * 发送 POST 请求。
    */
   public async post<T, B = unknown>(url: string, body?: B): Promise<T> {

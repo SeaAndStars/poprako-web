@@ -36,6 +36,7 @@ export interface OnlineWorkspacePageRecord {
   id: string;
   index: number;
   name: string;
+  translated_at?: number;
   image_source: LocalProjectImageSource;
   image_remote_url?: string;
   image_width: number;
@@ -312,6 +313,7 @@ function buildRemotePageRecord(
     id: pageInfo.id,
     index: displayIndex,
     name: pageName,
+    translated_at: pageInfo.translated_at,
     image_source: {
       kind: "web-remote",
       name: pageName,
@@ -538,6 +540,7 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
             ...existingPageRecord,
             index: displayIndex,
             name: resolvePageDisplayName(displayIndex),
+            translated_at: pageInfo.translated_at,
             image_remote_url: nextRemoteUrl,
             image_source:
               existingPageRecord.image_source.kind === "web-remote"

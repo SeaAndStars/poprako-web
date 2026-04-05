@@ -142,8 +142,8 @@
 
 .workspace-online-card .ant-card-body {
   display: grid;
-  gap: 14px;
-  padding: 20px;
+  gap: 12px;
+  padding: 16px;
 }
 
 .workspace-online-card__head {
@@ -155,7 +155,7 @@
 
 .workspace-online-card__identity {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -207,42 +207,42 @@
   font-weight: 600;
 }
 
-.workspace-online-card__stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+.workspace-online-card__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.workspace-online-card__stat {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 14px;
+.workspace-online-card__summary-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
   background: color-mix(in srgb, var(--surface) 88%, #eff6ff 12%);
-  border: 1px solid color-mix(in srgb, var(--panel-border) 88%, #dbeafe 12%);
-}
-
-.workspace-online-card__stat-value {
-  color: var(--text-primary);
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.workspace-online-card__stat-label {
-  color: var(--text-muted);
+  border: 1px solid color-mix(in srgb, var(--panel-border) 90%, #dbeafe 10%);
+  color: var(--text-secondary);
   font-size: 12px;
+  font-weight: 600;
+}
+
+.workspace-online-card__summary-pill.is-translate {
+  background: color-mix(in srgb, #fff7ed 88%, var(--surface) 12%);
+  color: #b45309;
+}
+
+.workspace-online-card__summary-pill.is-proofread {
+  background: color-mix(in srgb, #f0fdf4 88%, var(--surface) 12%);
+  color: #166534;
 }
 
 .workspace-online-card__progress-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .workspace-online-card__progress-block {
   display: grid;
-  gap: 10px;
-  padding: 14px;
+  gap: 8px;
+  padding: 12px;
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background: rgba(255, 255, 255, 0.7);
@@ -278,6 +278,10 @@
 .workspace-online-card__progress-foot {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.workspace-online-card__actions {
+  justify-content: flex-end;
 }
 
 .workspace-inline-empty {
@@ -353,10 +357,6 @@
   .workspace-online-grid,
   .workspace-online-card__progress-grid {
     grid-template-columns: 1fr;
-  }
-
-  .workspace-online-card__stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

@@ -43,6 +43,30 @@
       </div>
 
       <div v-if="currentPageMeta" class="translator-header__right">
+        <a-tooltip
+          v-if="shouldShowCompletePageTranslationButton"
+          placement="bottom"
+          :title="currentPageTranslationCompletionTooltip"
+        >
+          <span class="translator-header__complete-trigger-wrap">
+            <a-button
+              size="small"
+              class="translator-header__complete-trigger"
+              :class="{
+                'is-completed': isCurrentPageTranslationCompleted,
+              }"
+              :loading="isCompletingCurrentPageTranslation"
+              :disabled="!canTogglePageTranslationCompletion"
+              :aria-label="currentPageTranslationCompletionAriaLabel"
+              @click="handleCompletePageTranslation"
+            >
+              <template #icon>
+                <CheckOutlined />
+              </template>
+            </a-button>
+          </span>
+        </a-tooltip>
+
         <a-dropdown
           placement="bottomLeft"
           :trigger="['click']"
@@ -671,7 +695,7 @@
 </template>
 
 <script setup lang="ts">
-import { QuestionCircleOutlined } from "@ant-design/icons-vue";
+import { CheckOutlined, QuestionCircleOutlined } from "@ant-design/icons-vue";
 import { useTranslatorView } from "./useTranslatorView";
 
 type ShortcutKeyToken = {
@@ -713,6 +737,13 @@ const {
   shortcutHelpSections,
   currentPageStatusText,
   isCurrentPageLockedByOther,
+  shouldShowCompletePageTranslationButton,
+  canTogglePageTranslationCompletion,
+  currentPageTranslationCompletionTooltip,
+  currentPageTranslationCompletionAriaLabel,
+  isCurrentPageTranslationCompleted,
+  isCompletingCurrentPageTranslation,
+  handleCompletePageTranslation,
   moveToNextPage,
   currentPageImageURL,
   clearSelectedUnit,

@@ -84,6 +84,16 @@ export type GetPageListResponse = PageInfo[];
 export type UpdatePageResponse = void;
 
 /**
+ * 确认页面翻译完成响应类型。
+ */
+export type CompletePageTranslationResponse = void;
+
+/**
+ * 回退页面翻译完成响应类型。
+ */
+export type RevertPageTranslationCompletionResponse = void;
+
+/**
  * 删除章节页面响应类型。
  */
 export type DeleteChapterPagesResponse = void;
@@ -130,6 +140,28 @@ export async function updatePage(
   await httpClient.put<UpdatePageResponse, UpdatePageRequest>(
     `/pages/${pageID}`,
     updatePageArgs,
+  );
+}
+
+/**
+ * 确认页面翻译完成，对应 POST /pages/{page_id}/translation-completion。
+ */
+export async function completePageTranslation(
+  pageID: string,
+): Promise<CompletePageTranslationResponse> {
+  await httpClient.post<CompletePageTranslationResponse>(
+    `/pages/${pageID}/translation-completion`,
+  );
+}
+
+/**
+ * 回退页面翻译完成，对应 DELETE /pages/{page_id}/translation-completion。
+ */
+export async function revertPageTranslationCompletion(
+  pageID: string,
+): Promise<RevertPageTranslationCompletionResponse> {
+  await httpClient.delete<RevertPageTranslationCompletionResponse>(
+    `/pages/${pageID}/translation-completion`,
   );
 }
 

@@ -58,7 +58,7 @@
           <div>
             <h2 class="workspace-section__title">在线参与章节</h2>
             <p class="workspace-section__description">
-              你当前负责的翻译或校对章节会显示在这里，点击即可进入对应在线房间。
+              你当前负责的翻译、校对与嵌字章节会显示在这里；翻译和校对可直接进入在线房间，嵌字可下载当前章节译稿。
             </p>
           </div>
           <span class="workspace-section__count">
@@ -105,37 +105,31 @@
                 <a-tag
                   v-for="role in chapterEntry.roles"
                   :key="role.mode"
-                  :color="role.mode === 'translate' ? 'gold' : 'green'"
+                  :color="
+                    role.mode === 'translate'
+                      ? 'gold'
+                      : role.mode === 'proofread'
+                        ? 'green'
+                        : 'cyan'
+                  "
                 >
                   {{ role.label }}
                 </a-tag>
               </div>
 
-              <div class="workspace-online-card__stats">
-                <div class="workspace-online-card__stat">
-                  <span class="workspace-online-card__stat-value">
-                    {{ chapterEntry.pageCount }}
-                  </span>
-                  <span class="workspace-online-card__stat-label">页数</span>
-                </div>
-                <div class="workspace-online-card__stat">
-                  <span class="workspace-online-card__stat-value">
-                    {{ chapterEntry.totalUnitCount }}
-                  </span>
-                  <span class="workspace-online-card__stat-label">标记</span>
-                </div>
-                <div class="workspace-online-card__stat">
-                  <span class="workspace-online-card__stat-value">
-                    {{ chapterEntry.translatedUnitCount }}
-                  </span>
-                  <span class="workspace-online-card__stat-label">已翻</span>
-                </div>
-                <div class="workspace-online-card__stat">
-                  <span class="workspace-online-card__stat-value">
-                    {{ chapterEntry.proofreadUnitCount }}
-                  </span>
-                  <span class="workspace-online-card__stat-label">已校</span>
-                </div>
+              <div class="workspace-online-card__summary">
+                <span class="workspace-online-card__summary-pill">
+                  {{ chapterEntry.pageCount }} 页
+                </span>
+                <span class="workspace-online-card__summary-pill">
+                  {{ chapterEntry.totalUnitCount }} 标记
+                </span>
+                <span class="workspace-online-card__summary-pill is-translate">
+                  已翻 {{ chapterEntry.translatedUnitCount }}
+                </span>
+                <span class="workspace-online-card__summary-pill is-proofread">
+                  已校 {{ chapterEntry.proofreadUnitCount }}
+                </span>
               </div>
 
               <div class="workspace-online-card__progress-grid">
@@ -188,13 +182,21 @@
 
               <div class="workspace-online-card__actions">
                 <a-button
-                  v-for="role in chapterEntry.roles"
+                  v-for="role in chapterEntry.roles.filter(isWorkspaceEnterRole)"
                   :key="`${chapterEntry.chapterId}-${role.mode}`"
                   size="small"
                   :type="role.mode === 'translate' ? 'primary' : 'default'"
                   @click="handleOpenOnlineChapter(chapterEntry, role.mode)"
                 >
                   进入{{ role.label }}
+                </a-button>
+                <a-button
+                  v-if="chapterEntry.canDownloadManuscript"
+                  size="small"
+                  :loading="Boolean(downloadingChapterIDs[chapterEntry.chapterId])"
+                  @click="handleDownloadChapterManuscript(chapterEntry)"
+                >
+                  下载译稿
                 </a-button>
               </div>
             </a-card>
@@ -274,15 +276,18 @@ const {
   filteredProjects,
   formatParticipationTimestamp,
   handleDeleteProject,
+  handleDownloadChapterManuscript,
   handleOpenOnlineChapter,
   handleOpenProject,
   handleProjectCreated,
+  isWorkspaceEnterRole,
   loadMyOnlineAssignments,
   localProjectEmptyText,
   onlineAssignmentsErrorMessage,
   onlineAssignmentsLoading,
   onlineParticipationEmptyText,
   onlineParticipations,
+  downloadingChapterIDs,
   projects,
   searchKeyword,
   summaryCards,

@@ -44,9 +44,11 @@ import { Modal, message } from "ant-design-vue";
 import { storeToRefs } from "pinia";
 import { useRoute, useRouter } from "vue-router";
 import {
+  completePageTranslation,
   getAssignmentList,
   getCurrentUserProfile,
   getUserProfileByID,
+  revertPageTranslationCompletion,
 } from "../api/modules";
 import {
   appendCacheBustQueryToSharedAssetUrl,
@@ -138,6 +140,7 @@ export function useTranslatorView() {
   const selectedUnitID = ref<string | null>(null);
   const editingUnitID = ref<string | null>(null);
   const isAcquiringPageLock = ref(false);
+  const isCompletingCurrentPageTranslation = ref(false);
 
   /* ── 图片缩放 & 平移状态 ── */
   const stageScale = ref(1);
@@ -238,6 +241,24 @@ export function useTranslatorView() {
 
   const currentPageMeta = computed(() => {
     return projectRecord.value?.pages[currentPageIndex.value] ?? null;
+  });
+
+  function resolveCurrentPageTranslatedAt(): number | undefined {
+    if (!isOnlineWorkspace.value || !currentPageMeta.value) {
+      return undefined;
+    }
+
+    return "translated_at" in currentPageMeta.value
+      ? currentPageMeta.value.translated_at
+      : undefined;
+  }
+
+  const currentPageTranslatedAt = computed(() => {
+    return resolveCurrentPageTranslatedAt();
+  });
+
+  const isCurrentPageTranslationCompleted = computed(() => {
+    return Boolean(currentPageTranslatedAt.value);
   });
 
   const currentPageID = computed(() => currentPageMeta.value?.id ?? null);
@@ -764,6 +785,13 @@ export function useTranslatorView() {
   });
 
   const currentPageLockHint = computed(() => {
+    if (
+      editorMode.value === "translate" &&
+      isCurrentPageTranslationCompleted.value
+    ) {
+      return "本页翻译已完成，可回退后继续编辑或切换到校对模式";
+    }
+
     if (!currentPageEditor.value || !isCurrentPageLockedByOther.value) {
       return currentPageStatusText.value;
     }
@@ -774,6 +802,7 @@ export function useTranslatorView() {
   const currentPageCanEditTranslate = computed(() => {
     return (
       editorMode.value === "translate" &&
+      !isCurrentPageTranslationCompleted.value &&
       !isCurrentPageLockedByOther.value &&
       !isAcquiringPageLock.value
     );
@@ -790,9 +819,51 @@ export function useTranslatorView() {
   const currentPageCanMutateStructure = computed(() => {
     return (
       editorMode.value === "translate" &&
+      !isCurrentPageTranslationCompleted.value &&
       !isCurrentPageLockedByOther.value &&
       !isAcquiringPageLock.value
     );
+  });
+
+  const shouldShowCompletePageTranslationButton = computed(() => {
+    return (
+      isOnlineWorkspace.value &&
+      editorMode.value === "translate"
+    );
+  });
+
+  const canCompletePageTranslation = computed(() => {
+    return (
+      shouldShowCompletePageTranslationButton.value &&
+      !isCurrentPageLockedByOther.value &&
+      !isAcquiringPageLock.value &&
+      currentPageUnits.value.every((projectUnit) => isUnitTranslated(projectUnit))
+    );
+  });
+
+  const canRevertPageTranslationCompletion = computed(() => {
+    return (
+      shouldShowCompletePageTranslationButton.value &&
+      isCurrentPageTranslationCompleted.value &&
+      !isCurrentPageLockedByOther.value &&
+      !isAcquiringPageLock.value
+    );
+  });
+
+  const canTogglePageTranslationCompletion = computed(() => {
+    return isCurrentPageTranslationCompleted.value
+      ? canRevertPageTranslationCompletion.value
+      : canCompletePageTranslation.value;
+  });
+
+  const currentPageTranslationCompletionTooltip = computed(() => {
+    return isCurrentPageTranslationCompleted.value
+      ? "回退本页翻译完成"
+      : "确认本页已完成翻译";
+  });
+
+  const currentPageTranslationCompletionAriaLabel = computed(() => {
+    return currentPageTranslationCompletionTooltip.value;
   });
 
   const canToggleProofreadAction = computed(() => {
@@ -1156,6 +1227,25 @@ export function useTranslatorView() {
     }
 
     applyIncomingPageSnapshot(nextSnapshot);
+  });
+
+  const currentOnlineWorkspaceArgs = computed(() => {
+    if (!isOnlineWorkspace.value || !chapterID.value) {
+      return null;
+    }
+
+    return {
+      chapter_id: chapterID.value,
+      workset_id: onlineWorkspaceRecord.value?.workset_id,
+      comic_id: onlineWorkspaceRecord.value?.comic_id,
+      title: onlineWorkspaceRecord.value?.title || undefined,
+      author: onlineWorkspaceRecord.value?.author || undefined,
+      chapter_label: onlineWorkspaceRecord.value?.chapter_label || undefined,
+      chapter_subtitle:
+        onlineWorkspaceRecord.value?.chapter_subtitle || undefined,
+      return_workset_id: onlineWorkspaceRecord.value?.return_workset_id,
+      return_comic_id: onlineWorkspaceRecord.value?.return_comic_id,
+    };
   });
 
   watch(isCurrentPageLockedByOther, (lockedByOther) => {
@@ -1580,6 +1670,97 @@ export function useTranslatorView() {
     }
 
     return "";
+  }
+
+  async function refreshCurrentOnlineWorkspace(): Promise<void> {
+    if (!currentOnlineWorkspaceArgs.value) {
+      return;
+    }
+
+    await onlineWorkspaceStore.ensureChapterWorkspace(
+      currentOnlineWorkspaceArgs.value,
+    );
+  }
+
+  function resolvePageCompletionBlockedReason(): string {
+    if (isCurrentPageLockedByOther.value) {
+      return currentPageLockHint.value;
+    }
+
+    if (isAcquiringPageLock.value) {
+      return "正在获取页面锁，请稍后再试";
+    }
+
+    if (isCurrentPageTranslationCompleted.value) {
+      return currentPageLockHint.value;
+    }
+
+    if (!currentPageUnits.value.every((projectUnit) => isUnitTranslated(projectUnit))) {
+      return "当前页面仍有未翻译标记";
+    }
+
+    return currentPageLockHint.value;
+  }
+
+  function handleCompletePageTranslation(): void {
+    if (!currentPageMeta.value || !isOnlineWorkspace.value) {
+      return;
+    }
+
+    if (!canTogglePageTranslationCompletion.value) {
+      message.warning(resolvePageCompletionBlockedReason());
+      return;
+    }
+
+    const targetPageID = currentPageMeta.value.id;
+    const targetPageLabel = currentPageMeta.value.name;
+    const totalUnitCount = currentPageUnits.value.length;
+    const isReverting = isCurrentPageTranslationCompleted.value;
+
+    Modal.confirm({
+      title: isReverting ? "回退本页翻译完成" : "确认本页已完成翻译",
+      content: isReverting
+        ? `${targetPageLabel} 将恢复为可继续翻译状态，确认回退吗？`
+        : totalUnitCount > 0
+          ? `${targetPageLabel} 的 ${totalUnitCount} 个标记都将锁定为已完成翻译，确认继续吗？`
+          : `${targetPageLabel} 当前没有标记，确认按空白页处理并标记翻译完成吗？`,
+      okText: isReverting ? "确认回退" : "确认完成",
+      cancelText: "取消",
+      async onOk() {
+        if (!(await ensureCurrentPageEditLock("translate"))) {
+          return;
+        }
+
+        isCompletingCurrentPageTranslation.value = true;
+
+        try {
+          if (!isReverting) {
+            await onlineWorkspaceStore.flushPageUnits(chapterID.value, targetPageID);
+            await completePageTranslation(targetPageID);
+          } else {
+            await revertPageTranslationCompletion(targetPageID);
+          }
+
+          await refreshCurrentOnlineWorkspace();
+          message.success(
+            isReverting
+              ? `${targetPageLabel} 已回退为可继续翻译`
+              : `${targetPageLabel} 已确认翻译完成`,
+          );
+        } catch (error) {
+          message.error(
+            error instanceof Error
+              ? error.message
+              : isReverting
+                ? "回退页面翻译完成失败"
+                : "确认页面翻译完成失败",
+          );
+          throw error;
+        } finally {
+          isCompletingCurrentPageTranslation.value = false;
+        }
+      },
+    });
   }
 
   function resolveProofreadBubbleStyle(
@@ -2483,6 +2664,13 @@ export function useTranslatorView() {
     shortcutHelpSections,
     currentPageStatusText,
     isCurrentPageLockedByOther,
+    shouldShowCompletePageTranslationButton,
+    canTogglePageTranslationCompletion,
+    currentPageTranslationCompletionTooltip,
+    currentPageTranslationCompletionAriaLabel,
+    isCurrentPageTranslationCompleted,
+    isCompletingCurrentPageTranslation,
+    handleCompletePageTranslation,
     moveToNextPage,
     currentPageImageURL,
     clearSelectedUnit,
