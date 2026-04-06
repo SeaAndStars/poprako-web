@@ -10,6 +10,10 @@ import type { UnitInfo } from "../../types/domain";
 export interface UnitListQuery {
   /** 页面 ID。 */
   page_id: string;
+  /** 可选分页偏移量。 */
+  offset?: number;
+  /** 可选分页大小，后端当前最大支持 500。 */
+  limit?: number;
 }
 
 /**

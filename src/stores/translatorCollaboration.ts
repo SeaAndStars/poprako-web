@@ -19,6 +19,11 @@ import {
 } from "../local-project/types";
 import { useAuthStore } from "./auth";
 
+const DEFAULT_PAGE_SNAPSHOT_SYNC_DELAY_MS = 120;
+const LARGE_PAGE_SNAPSHOT_SYNC_DELAY_MS = 400;
+const LARGE_PAGE_SNAPSHOT_UNIT_THRESHOLD = 200;
+const LARGE_PAGE_SNAPSHOT_SOFT_LIMIT_BYTES = 256 * 1024;
+
 
 export interface TranslatorCollaboratorIdentity {
   user_id: string;
@@ -113,6 +118,26 @@ function cloneUnits(units: LocalProjectUnit[]): LocalProjectUnit[] {
     ...normalizeLocalProjectUnitGeometry(projectUnit),
     index: index + 1,
   }));
+}
+
+function estimateUnitsSnapshotBytes(units: LocalProjectUnit[]): number {
+  try {
+    return new TextEncoder().encode(JSON.stringify(units)).length;
+  } catch {
+    return units.length * 256;
+  }
+}
+
+function resolveSnapshotSyncDelay(units: LocalProjectUnit[]): number {
+  if (units.length >= LARGE_PAGE_SNAPSHOT_UNIT_THRESHOLD) {
+    return LARGE_PAGE_SNAPSHOT_SYNC_DELAY_MS;
+  }
+
+  if (estimateUnitsSnapshotBytes(units) >= LARGE_PAGE_SNAPSHOT_SOFT_LIMIT_BYTES) {
+    return LARGE_PAGE_SNAPSHOT_SYNC_DELAY_MS;
+  }
+
+  return DEFAULT_PAGE_SNAPSHOT_SYNC_DELAY_MS;
 }
 
 function normalizeMode(rawMode: string | undefined): TranslatorMode {
@@ -871,7 +896,7 @@ async function releaseCurrentPageLock(): Promise<void> {
 
       pendingSnapshotTimer = window.setTimeout(() => {
         void flushPendingPageSnapshotSync();
-      }, 120);
+      }, resolveSnapshotSyncDelay(clonedUnits));
     }
 
     async function flushPendingPageSnapshotSync(): Promise<void> {

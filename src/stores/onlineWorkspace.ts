@@ -29,6 +29,7 @@ const ONLINE_WORKSPACE_STORAGE_KEY = "poprako_online_workspace_cache_v1";
 const ONLINE_PAGE_SAVE_DEBOUNCE_MS = 450;
 const ONLINE_INITIAL_PRELOAD_PAGE_COUNT = 3;
 const ONLINE_PAGE_PREFETCH_LOOKAHEAD = 2;
+const ONLINE_PAGE_UNIT_FETCH_BATCH_SIZE = 500;
 
 type RemoteIndexBase = 0 | 1;
 
@@ -36,6 +37,7 @@ export interface OnlineWorkspacePageRecord {
   id: string;
   index: number;
   name: string;
+  total_unit_count: number;
   translated_at?: number;
   image_source: LocalProjectImageSource;
   image_remote_url?: string;
@@ -313,6 +315,7 @@ function buildRemotePageRecord(
     id: pageInfo.id,
     index: displayIndex,
     name: pageName,
+    total_unit_count: Math.max(pageInfo.total_unit_count ?? 0, 0),
     translated_at: pageInfo.translated_at,
     image_source: {
       kind: "web-remote",
@@ -340,6 +343,37 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
     string,
     Promise<OnlineWorkspacePageRecord>
   >();
+
+  async function loadRemotePageUnits(
+    pageID: string,
+    expectedTotalUnitCount: number,
+  ): Promise<UnitInfo[]> {
+    if (expectedTotalUnitCount <= ONLINE_PAGE_UNIT_FETCH_BATCH_SIZE) {
+      return getUnitList({ page_id: pageID });
+    }
+
+    const remoteUnits: UnitInfo[] = [];
+
+    for (let offset = 0; ; offset += ONLINE_PAGE_UNIT_FETCH_BATCH_SIZE) {
+      const unitBatch = await getUnitList({
+        page_id: pageID,
+        offset,
+        limit: ONLINE_PAGE_UNIT_FETCH_BATCH_SIZE,
+      });
+
+      if (unitBatch.length === 0) {
+        break;
+      }
+
+      remoteUnits.push(...unitBatch);
+
+      if (unitBatch.length < ONLINE_PAGE_UNIT_FETCH_BATCH_SIZE) {
+        break;
+      }
+    }
+
+    return remoteUnits;
+  }
 
   function persistWorkspaceState(): void {
     localStorage.setItem(
@@ -540,6 +574,10 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
             ...existingPageRecord,
             index: displayIndex,
             name: resolvePageDisplayName(displayIndex),
+            total_unit_count: Math.max(
+              pageInfo.total_unit_count ?? existingPageRecord.total_unit_count,
+              0,
+            ),
             translated_at: pageInfo.translated_at,
             image_remote_url: nextRemoteUrl,
             image_source:
@@ -661,13 +699,28 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
       return cloneUnits(currentWorkingUnits);
     }
 
-    const remoteUnits = await getUnitList({ page_id: pageID });
+    const remoteUnits = await loadRemotePageUnits(
+      pageID,
+      Math.max(pageRecord.total_unit_count, 0),
+    );
     const remoteIndexBase = inferRemoteIndexBase(remoteUnits);
+    const normalizedUnitCount = remoteUnits.length;
+    const shouldSyncPageRecord =
+      pageRecord.remote_index_base !== remoteIndexBase ||
+      pageRecord.total_unit_count !== normalizedUnitCount;
+
     pageRecord.remote_index_base = remoteIndexBase;
+    pageRecord.total_unit_count = normalizedUnitCount;
 
     const normalizedUnits = remoteUnits
       .map((unitInfo) => buildPageLocalUnit(unitInfo, pageRecord))
       .sort((leftUnit, rightUnit) => leftUnit.index - rightUnit.index);
+
+    if (shouldSyncPageRecord) {
+      setWorkspacePageRecord(chapterID, {
+        ...pageRecord,
+      });
+    }
 
     baseUnitsByPageID.value = {
       ...baseUnitsByPageID.value,
@@ -879,6 +932,13 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
         page_id: pageID,
         unit_diff: unitDiff,
       });
+
+      if (pageRecord.total_unit_count !== nextUnits.length) {
+        setWorkspacePageRecord(chapterID, {
+          ...pageRecord,
+          total_unit_count: nextUnits.length,
+        });
+      }
 
       baseUnitsByPageID.value = {
         ...baseUnitsByPageID.value,
