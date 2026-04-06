@@ -25,7 +25,12 @@ import {
   type OnlineWorkspaceRecord,
 } from "../stores/onlineWorkspace";
 import { useSpecialSymbolsStore } from "../stores/specialSymbols";
-import { useTranslatorSettingsStore } from "../stores/translatorSettings";
+import {
+  TRANSLATOR_SHORTCUT_ACTION_DEFINITIONS,
+  formatShortcutBindingForDisplay,
+  type TranslatorShortcutActionId,
+  useTranslatorSettingsStore,
+} from "../stores/translatorSettings";
 import {
   useTranslatorCollaborationStore,
   type TranslatorCollaboratorIdentity,
@@ -927,6 +932,24 @@ export function useTranslatorView() {
     };
   });
 
+  function resolveShortcutBindingDisplay(
+    actionId: TranslatorShortcutActionId,
+  ): string {
+    return formatShortcutBindingForDisplay(
+      translatorSettingsStore.getShortcutBinding(actionId),
+    );
+  }
+
+  function buildKeyboardShortcutHelpItem(
+    actionId: TranslatorShortcutActionId,
+  ): ShortcutHelpItem {
+    const definition = TRANSLATOR_SHORTCUT_ACTION_DEFINITIONS[actionId];
+    return {
+      keys: resolveShortcutBindingDisplay(actionId),
+      description: definition.helpText,
+    };
+  }
+
   const shortcutHelpSections = computed<ShortcutHelpSection[]>(() => {
     return [
       {
@@ -935,22 +958,33 @@ export function useTranslatorView() {
           { keys: "左键", description: "框内落点" },
           { keys: "右键", description: "框外落点" },
           { keys: "右键标记", description: "删除标点" },
-          { keys: "Space", description: "编辑标点" },
+          buildKeyboardShortcutHelpItem("focusSelectedUnit"),
+          buildKeyboardShortcutHelpItem("commitEditing"),
+          buildKeyboardShortcutHelpItem("exitEditing"),
+          buildKeyboardShortcutHelpItem("nextUnit"),
+          buildKeyboardShortcutHelpItem("previousUnit"),
+          buildKeyboardShortcutHelpItem("deleteSelectedUnit"),
         ],
       },
       {
         title: "页面导航",
         items: [
-          { keys: "Tab", description: "下一个标点" },
-          { keys: "Shift + Tab", description: "上一个标点" },
-          { keys: "Ctrl + ← / →", description: "上一页 / 下一页" },
+          buildKeyboardShortcutHelpItem("previousPage"),
+          buildKeyboardShortcutHelpItem("nextPage"),
+        ],
+      },
+      {
+        title: "视图操作",
+        items: [
+          buildKeyboardShortcutHelpItem("toggleMode"),
+          buildKeyboardShortcutHelpItem("resetZoom"),
         ],
       },
     ];
   });
 
   const footerHintText = computed(() => {
-    return "左键：框内 · 右键：框外 · 右键标记：删除 · Space：编辑";
+    return `左键：框内 · 右键：框外 · 右键标记：删除 · ${resolveShortcutBindingDisplay("focusSelectedUnit")}：编辑`;
   });
 
   const currentPageTranslatedCount = computed(() => {
@@ -1534,6 +1568,31 @@ export function useTranslatorView() {
         ? "已切换到翻译模式"
         : "已切换到校对模式",
     );
+  }
+
+  function hasOpenModal(): boolean {
+    return Boolean(document.querySelector(".ant-modal-root .ant-modal-wrap"));
+  }
+
+  function matchesShortcutAction(
+    actionId: TranslatorShortcutActionId,
+    event: KeyboardEvent,
+  ): boolean {
+    return translatorSettingsStore.matchesShortcutBinding(actionId, event);
+  }
+
+  function moveToAdjacentPage(
+    direction: -1 | 1,
+    eventTarget?: EventTarget | null,
+  ): void {
+    commitSelectedUnitEditing(eventTarget, true);
+
+    if (direction === -1) {
+      moveToPreviousPage();
+      return;
+    }
+
+    moveToNextPage();
   }
 
   /**
@@ -2505,106 +2564,102 @@ export function useTranslatorView() {
       return;
     }
 
+    if (hasOpenModal()) {
+      return;
+    }
+
     const selectedTextareaTarget = resolveSelectedTextareaTarget(event.target);
     const isShortcutBlocked = isShortcutBlockedTarget(event.target);
 
-    if (event.key === "Escape" && selectedUnitID.value) {
-      if (document.querySelector(".ant-modal-root .ant-modal-wrap")) {
-        return;
-      }
-
+    if (selectedUnitID.value && matchesShortcutAction("exitEditing", event)) {
       event.preventDefault();
       exitSelectedUnitEditing(event.target);
       return;
     }
 
-    if (event.key === "Enter" && selectedTextareaTarget && !event.shiftKey) {
+    if (
+      selectedTextareaTarget &&
+      matchesShortcutAction("commitEditing", event)
+    ) {
       event.preventDefault();
       commitSelectedUnitEditing(event.target);
       return;
     }
 
-    if (event.key === "F1" || event.key === "PageUp") {
+    if (matchesShortcutAction("previousPage", event)) {
       event.preventDefault();
-      moveToPreviousPage();
+      moveToAdjacentPage(-1, event.target);
       return;
     }
 
-    if (event.key === "F2" || event.key === "PageDown") {
+    if (matchesShortcutAction("nextPage", event)) {
       event.preventDefault();
-      moveToNextPage();
+      moveToAdjacentPage(1, event.target);
       return;
     }
 
-    if (event.ctrlKey && event.key.toLowerCase() === "m") {
+    if (matchesShortcutAction("toggleMode", event)) {
       event.preventDefault();
-      editorMode.value =
-        editorMode.value === "translate" ? "proofread" : "translate";
-      message.success(
-        editorMode.value === "translate"
-          ? "已切换到翻译模式"
-          : "已切换到校对模式",
-      );
+      toggleEditorMode();
       return;
-    }
-
-    if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        commitSelectedUnitEditing(event.target, true);
-        moveToPreviousPage();
-        return;
-      }
-
-      if (event.key === "ArrowRight") {
-        event.preventDefault();
-        commitSelectedUnitEditing(event.target, true);
-        moveToNextPage();
-        return;
-      }
     }
 
     if (
-      (event.key === "ArrowUp" || event.key === "ArrowDown") &&
-      !isShortcutBlocked
+      selectedTextareaTarget &&
+      matchesShortcutAction("previousUnit", event)
     ) {
       event.preventDefault();
-      moveSelectedUnit(event.key === "ArrowUp" ? -1 : 1);
+      commitSelectedUnitEditing(event.target);
+      moveSelectedUnit(-1);
+      return;
+    }
+
+    if (selectedTextareaTarget && matchesShortcutAction("nextUnit", event)) {
+      event.preventDefault();
+      commitSelectedUnitEditing(event.target);
+      moveSelectedUnit(1);
       return;
     }
 
     if (
-      (event.key === " " || event.code === "Space") &&
+      !isShortcutBlocked &&
+      matchesShortcutAction("previousUnit", event)
+    ) {
+      event.preventDefault();
+      moveSelectedUnit(-1);
+      return;
+    }
+
+    if (!isShortcutBlocked && matchesShortcutAction("nextUnit", event)) {
+      event.preventDefault();
+      moveSelectedUnit(1);
+      return;
+    }
+
+    if (
       selectedUnitID.value &&
-      !isShortcutBlocked
+      !isShortcutBlocked &&
+      matchesShortcutAction("focusSelectedUnit", event)
     ) {
       event.preventDefault();
       focusActiveFieldLater();
       return;
     }
 
-    if (event.key === "Tab" && selectedTextareaTarget) {
-      event.preventDefault();
-      commitSelectedUnitEditing(event.target);
-      moveSelectedUnit(event.shiftKey ? -1 : 1);
-      return;
-    }
-
-    if (event.key === "Tab" && !isShortcutBlocked) {
-      event.preventDefault();
-      moveSelectedUnit(event.shiftKey ? -1 : 1);
-      return;
-    }
-
-    if (event.key === "Delete" && !isShortcutBlocked && selectedUnitID.value) {
+    if (
+      selectedUnitID.value &&
+      !isShortcutBlocked &&
+      matchesShortcutAction("deleteSelectedUnit", event)
+    ) {
       event.preventDefault();
       void requestRemoveUnit(selectedUnitID.value);
       return;
     }
 
-    if (event.ctrlKey && event.key === "0") {
+    if (matchesShortcutAction("resetZoom", event)) {
       event.preventDefault();
       resetStageTransform();
+      return;
     }
   }
 

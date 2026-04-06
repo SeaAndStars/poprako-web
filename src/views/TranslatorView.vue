@@ -87,7 +87,7 @@
             <div class="translator-shortcuts-card" @click.stop>
               <div class="translator-shortcuts-card__title">快捷键</div>
               <div class="translator-shortcuts-card__subtitle">
-                只显示常用操作，其他兼容快捷键仍可使用。
+                显示当前生效的快捷键配置。
               </div>
 
               <section
@@ -146,64 +146,180 @@
           v-model:open="isSettingsModalOpen"
           title="编辑器设置"
           :footer="null"
-          :width="400"
+          :width="560"
           :destroy-on-close="true"
         >
-          <div class="translator-settings-form">
-            <div class="translator-settings-form__item">
-              <label class="translator-settings-form__label">
-                新建标记后行为
-              </label>
-              <a-radio-group
-                v-model:value="markerCreationBehaviorModel"
-                size="small"
-              >
-                <a-radio-button value="select">仅选中</a-radio-button>
-                <a-radio-button value="edit"> 选中并编辑 </a-radio-button>
-              </a-radio-group>
-              <div class="translator-settings-form__hint">
-                「仅选中」：创建后高亮标记但不打开文本框，适合先批量标号。
-              </div>
-            </div>
+          <a-tabs
+            v-model:activeKey="activeSettingsTabKey"
+            size="small"
+            class="translator-settings-tabs"
+          >
+            <a-tab-pane key="editor" tab="编辑器设置">
+              <div class="translator-settings-form translator-settings-tab-panel">
+                <div class="translator-settings-form__item">
+                  <label class="translator-settings-form__label">
+                    新建标记后行为
+                  </label>
+                  <a-radio-group
+                    v-model:value="markerCreationBehaviorModel"
+                    size="small"
+                  >
+                    <a-radio-button value="select">仅选中</a-radio-button>
+                    <a-radio-button value="edit"> 选中并编辑 </a-radio-button>
+                  </a-radio-group>
+                  <div class="translator-settings-form__hint">
+                    「仅选中」：创建后高亮标记但不打开文本框，适合先批量标号。
+                  </div>
+                </div>
 
-            <div class="translator-settings-form__item">
-              <label class="translator-settings-form__label">
-                标记透明度
-              </label>
-              <a-slider
-                v-model:value="markerOpacitySliderDraft"
-                :min="30"
-                :max="100"
-                :step="5"
-                :tip-formatter="(val?: number) => `${val ?? 85}%`"
-                @afterChange="commitMarkerOpacityDraft"
-              />
-              <div class="translator-settings-form__value">
-                {{ markerOpacitySliderDraft }}%
-              </div>
-              <div class="translator-settings-form__hint">
-                降低透明度可减少标号对文字的遮挡。
-              </div>
-            </div>
+                <div class="translator-settings-form__item">
+                  <label class="translator-settings-form__label">
+                    标记透明度
+                  </label>
+                  <a-slider
+                    v-model:value="markerOpacitySliderDraft"
+                    :min="30"
+                    :max="100"
+                    :step="5"
+                    :tip-formatter="(val?: number) => `${val ?? 85}%`"
+                    @afterChange="commitMarkerOpacityDraft"
+                  />
+                  <div class="translator-settings-form__value">
+                    {{ markerOpacitySliderDraft }}%
+                  </div>
+                  <div class="translator-settings-form__hint">
+                    降低透明度可减少标号对文字的遮挡。
+                  </div>
+                </div>
 
-            <div class="translator-settings-form__item">
-              <label class="translator-settings-form__label"> 标记大小 </label>
-              <a-slider
-                v-model:value="markerSizeSliderDraft"
-                :min="16"
-                :max="44"
-                :step="2"
-                :tip-formatter="(val?: number) => `${val ?? 28}px`"
-                @afterChange="commitMarkerSizeDraft"
-              />
-              <div class="translator-settings-form__value">
-                {{ markerSizeSliderDraft }}px
+                <div class="translator-settings-form__item">
+                  <label class="translator-settings-form__label"> 标记大小 </label>
+                  <a-slider
+                    v-model:value="markerSizeSliderDraft"
+                    :min="16"
+                    :max="44"
+                    :step="2"
+                    :tip-formatter="(val?: number) => `${val ?? 28}px`"
+                    @afterChange="commitMarkerSizeDraft"
+                  />
+                  <div class="translator-settings-form__value">
+                    {{ markerSizeSliderDraft }}px
+                  </div>
+                  <div class="translator-settings-form__hint">
+                    调小标记圆点以减少对画面内容的遮挡。
+                  </div>
+                </div>
               </div>
-              <div class="translator-settings-form__hint">
-                调小标记圆点以减少对画面内容的遮挡。
+            </a-tab-pane>
+
+            <a-tab-pane key="shortcuts" tab="快捷键">
+              <div class="translator-settings-tab-panel translator-settings-shortcuts-panel">
+                <div class="translator-settings-form__section-head">
+                  <div>
+                    <div class="translator-settings-form__label">键盘快捷键</div>
+                    <div class="translator-settings-form__hint">
+                      点击“录入”后按下新的快捷键；如果与其他功能冲突，会保留原有设置。
+                    </div>
+                  </div>
+
+                  <a-button
+                    size="small"
+                    :disabled="!hasCustomShortcutBindings"
+                    @click="restoreAllShortcutBindings"
+                  >
+                    恢复全部默认
+                  </a-button>
+                </div>
+
+                <div class="translator-settings-shortcuts">
+                  <section
+                    v-for="section in shortcutSettingSections"
+                    :key="section.title"
+                    class="translator-settings-shortcuts__section"
+                  >
+                    <div class="translator-settings-shortcuts__section-title">
+                      {{ section.title }}
+                    </div>
+
+                    <div class="translator-settings-shortcuts__list">
+                      <div
+                        v-for="actionId in section.items"
+                        :key="actionId"
+                        class="translator-settings-shortcuts__row"
+                      >
+                        <div class="translator-settings-shortcuts__meta">
+                          <div class="translator-settings-shortcuts__label">
+                            {{ resolveShortcutActionLabel(actionId) }}
+                          </div>
+                          <div class="translator-settings-shortcuts__hint">
+                            {{ resolveShortcutActionDescription(actionId) }}
+                          </div>
+                          <div class="translator-settings-shortcuts__default">
+                            默认：{{
+                              resolveShortcutDefaultBindingDisplay(actionId)
+                            }}
+                          </div>
+                        </div>
+
+                        <div class="translator-settings-shortcuts__controls">
+                          <a-button
+                            size="small"
+                            class="translator-settings-shortcuts__record-button"
+                            :type="
+                              isShortcutRecording(actionId)
+                                ? 'primary'
+                                : 'default'
+                            "
+                            :title="
+                              isShortcutRecording(actionId)
+                                ? '等待新的快捷键输入'
+                                : resolveShortcutBindingDisplay(actionId)
+                            "
+                            @click="toggleShortcutRecording(actionId)"
+                          >
+                            {{
+                              isShortcutRecording(actionId)
+                                ? '按下快捷键...'
+                                : resolveShortcutBindingDisplay(actionId)
+                            }}
+                          </a-button>
+
+                          <div class="translator-settings-shortcuts__actions">
+                            <div
+                              class="translator-settings-shortcuts__record-hint"
+                              :class="{
+                                'is-recording': isShortcutRecording(actionId),
+                              }"
+                            >
+                              {{
+                                isShortcutRecording(actionId)
+                                  ? '再次点击可取消录入'
+                                  : '点击录入以修改快捷键'
+                              }}
+                            </div>
+
+                            <a-button
+                              size="small"
+                              type="link"
+                              class="translator-settings-shortcuts__reset-button"
+                              :disabled="
+                                translatorSettingsStore.isShortcutBindingDefault(
+                                  actionId,
+                                )
+                              "
+                              @click="restoreShortcutBinding(actionId)"
+                            >
+                              恢复默认
+                            </a-button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                </div>
               </div>
-            </div>
-          </div>
+            </a-tab-pane>
+          </a-tabs>
         </a-modal>
 
         <a-button
@@ -775,9 +891,17 @@ import {
   QuestionCircleOutlined,
   SettingOutlined,
 } from "@ant-design/icons-vue";
+import { message } from "ant-design-vue";
 import { computed, ref, watch } from "vue";
 import TranslatorMarker from "../components/TranslatorMarker.vue";
-import type { MarkerCreationBehavior } from "../stores/translatorSettings";
+import {
+  TRANSLATOR_SHORTCUT_ACTION_DEFINITIONS,
+  TRANSLATOR_SHORTCUT_ACTION_ORDER,
+  formatShortcutBindingForDisplay,
+  normalizeKeyboardEventToShortcut,
+  type MarkerCreationBehavior,
+  type TranslatorShortcutActionId,
+} from "../stores/translatorSettings";
 import { useTranslatorView } from "./useTranslatorView";
 
 type ShortcutKeyToken = {
@@ -785,9 +909,27 @@ type ShortcutKeyToken = {
   value: string;
 };
 
+type ShortcutSettingSection = {
+  title: string;
+  items: TranslatorShortcutActionId[];
+};
+
+type SettingsModalTabKey = "editor" | "shortcuts";
+
+const DEFAULT_SETTINGS_MODAL_TAB: SettingsModalTabKey = "editor";
+
+function isModifierOnlyShortcutKey(key: string): boolean {
+  return (
+    key === "Control" ||
+    key === "Shift" ||
+    key === "Alt" ||
+    key === "Meta"
+  );
+}
+
 function tokenizeShortcutKeys(keys: string): ShortcutKeyToken[] {
   return keys
-    .split(/(\s+\+\s+|\s+\/\s+)/g)
+    .split(/(\+|\/)/g)
     .map((token) => token.trim())
     .filter(Boolean)
     .map((token) => ({
@@ -881,6 +1023,10 @@ const {
 } = useTranslatorView();
 
 const isSettingsModalOpen = ref(false);
+const activeSettingsTabKey = ref<SettingsModalTabKey>(
+  DEFAULT_SETTINGS_MODAL_TAB,
+);
+const recordingShortcutActionId = ref<TranslatorShortcutActionId | null>(null);
 
 const markerCreationBehaviorModel = computed<MarkerCreationBehavior>({
   get: () => translatorSettingsStore.markerCreationBehavior,
@@ -922,6 +1068,148 @@ watch(normalizedMarkerSize, (value) => {
     markerSizeSliderDraft.value = value;
   }
 });
+
+const shortcutSettingSections = computed<ShortcutSettingSection[]>(() => {
+  const sectionMap = new Map<string, TranslatorShortcutActionId[]>();
+
+  for (const actionId of TRANSLATOR_SHORTCUT_ACTION_ORDER) {
+    const sectionTitle =
+      TRANSLATOR_SHORTCUT_ACTION_DEFINITIONS[actionId].sectionTitle;
+    const existingItems = sectionMap.get(sectionTitle) ?? [];
+    existingItems.push(actionId);
+    sectionMap.set(sectionTitle, existingItems);
+  }
+
+  return Array.from(sectionMap.entries()).map(([title, items]) => ({
+    title,
+    items,
+  }));
+});
+
+const hasCustomShortcutBindings = computed(() => {
+  return TRANSLATOR_SHORTCUT_ACTION_ORDER.some((actionId) => {
+    return !translatorSettingsStore.isShortcutBindingDefault(actionId);
+  });
+});
+
+watch(isSettingsModalOpen, (open) => {
+  if (!open) {
+    activeSettingsTabKey.value = DEFAULT_SETTINGS_MODAL_TAB;
+    recordingShortcutActionId.value = null;
+  }
+});
+
+watch(recordingShortcutActionId, (actionId, _, onCleanup) => {
+  if (!actionId || !isSettingsModalOpen.value) {
+    return;
+  }
+
+  const handleShortcutRecordingKeydown = (event: KeyboardEvent) => {
+    if (!recordingShortcutActionId.value || !isSettingsModalOpen.value) {
+      return;
+    }
+
+    if (event.isComposing) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+
+    if (isModifierOnlyShortcutKey(event.key)) {
+      return;
+    }
+
+    const normalizedBinding = normalizeKeyboardEventToShortcut(event);
+    if (!normalizedBinding) {
+      message.warning("不支持该快捷键组合");
+      return;
+    }
+
+    const updateResult = translatorSettingsStore.setShortcutBindingForAction(
+      recordingShortcutActionId.value,
+      normalizedBinding,
+    );
+
+    if (!updateResult.ok) {
+      if (updateResult.error === "conflict" && updateResult.conflictActionId) {
+        message.error(
+          `该快捷键已被“${resolveShortcutActionLabel(updateResult.conflictActionId)}”使用`,
+        );
+        return;
+      }
+
+      message.warning("不支持该快捷键组合");
+      return;
+    }
+
+    recordingShortcutActionId.value = null;
+  };
+
+  window.addEventListener("keydown", handleShortcutRecordingKeydown, true);
+
+  onCleanup(() => {
+    window.removeEventListener(
+      "keydown",
+      handleShortcutRecordingKeydown,
+      true,
+    );
+  });
+});
+
+function resolveShortcutActionLabel(
+  actionId: TranslatorShortcutActionId,
+): string {
+  return TRANSLATOR_SHORTCUT_ACTION_DEFINITIONS[actionId].label;
+}
+
+function resolveShortcutActionDescription(
+  actionId: TranslatorShortcutActionId,
+): string {
+  return TRANSLATOR_SHORTCUT_ACTION_DEFINITIONS[actionId].description;
+}
+
+function resolveShortcutBindingDisplay(
+  actionId: TranslatorShortcutActionId,
+): string {
+  return formatShortcutBindingForDisplay(
+    translatorSettingsStore.getShortcutBinding(actionId),
+  );
+}
+
+function resolveShortcutDefaultBindingDisplay(
+  actionId: TranslatorShortcutActionId,
+): string {
+  return formatShortcutBindingForDisplay(
+    TRANSLATOR_SHORTCUT_ACTION_DEFINITIONS[actionId].defaultBinding,
+  );
+}
+
+function isShortcutRecording(actionId: TranslatorShortcutActionId): boolean {
+  return recordingShortcutActionId.value === actionId;
+}
+
+function toggleShortcutRecording(actionId: TranslatorShortcutActionId): void {
+  recordingShortcutActionId.value =
+    recordingShortcutActionId.value === actionId ? null : actionId;
+}
+
+function restoreShortcutBinding(actionId: TranslatorShortcutActionId): void {
+  translatorSettingsStore.resetShortcutBindingForAction(actionId);
+
+  if (recordingShortcutActionId.value === actionId) {
+    recordingShortcutActionId.value = null;
+  }
+}
+
+function restoreAllShortcutBindings(): void {
+  translatorSettingsStore.resetAllShortcutBindings();
+  recordingShortcutActionId.value = null;
+  message.success("已恢复默认快捷键");
+}
 
 function commitMarkerOpacityDraft(value?: number | [number, number]): void {
   const nextValue = Array.isArray(value)
