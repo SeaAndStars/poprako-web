@@ -25,6 +25,7 @@ import {
   type OnlineWorkspaceRecord,
 } from "../stores/onlineWorkspace";
 import { useSpecialSymbolsStore } from "../stores/specialSymbols";
+import { useTranslatorSettingsStore } from "../stores/translatorSettings";
 import {
   useTranslatorCollaborationStore,
   type TranslatorCollaboratorIdentity,
@@ -83,6 +84,7 @@ export function useTranslatorView() {
   const localProjectsStore = useLocalProjectsStore();
   const onlineWorkspaceStore = useOnlineWorkspaceStore();
   const specialSymbolsStore = useSpecialSymbolsStore();
+  const translatorSettingsStore = useTranslatorSettingsStore();
   const translatorCollaborationStore = useTranslatorCollaborationStore();
   const { projects } = storeToRefs(localProjectsStore);
   const { workspaces: onlineWorkspaces, loadingChapterIDs } =
@@ -826,10 +828,7 @@ export function useTranslatorView() {
   });
 
   const shouldShowCompletePageTranslationButton = computed(() => {
-    return (
-      isOnlineWorkspace.value &&
-      editorMode.value === "translate"
-    );
+    return isOnlineWorkspace.value && editorMode.value === "translate";
   });
 
   const canCompletePageTranslation = computed(() => {
@@ -837,7 +836,9 @@ export function useTranslatorView() {
       shouldShowCompletePageTranslationButton.value &&
       !isCurrentPageLockedByOther.value &&
       !isAcquiringPageLock.value &&
-      currentPageUnits.value.every((projectUnit) => isUnitTranslated(projectUnit))
+      currentPageUnits.value.every((projectUnit) =>
+        isUnitTranslated(projectUnit),
+      )
     );
   });
 
@@ -1118,6 +1119,7 @@ export function useTranslatorView() {
         currentPageUnits.value = nextUnits;
         selectedUnitID.value = nextUnits[0]?.id ?? null;
         editingUnitID.value = null;
+        focusActiveFieldLater(false);
 
         if (isOnlineWorkspace.value) {
           void ensureOnlineAssignmentProfilesLoaded(chapterID.value);
@@ -1652,7 +1654,11 @@ export function useTranslatorView() {
 
     persistCurrentPageUnits([...currentPageUnits.value, newUnit]);
     selectedUnitID.value = newUnit.id;
-    focusActiveFieldLater();
+
+    if (translatorSettingsStore.markerCreationBehavior === "edit") {
+      editingUnitID.value = newUnit.id;
+      focusActiveFieldLater();
+    }
   }
 
   function clearSelectedUnit(): void {
@@ -1695,7 +1701,11 @@ export function useTranslatorView() {
       return currentPageLockHint.value;
     }
 
-    if (!currentPageUnits.value.every((projectUnit) => isUnitTranslated(projectUnit))) {
+    if (
+      !currentPageUnits.value.every((projectUnit) =>
+        isUnitTranslated(projectUnit),
+      )
+    ) {
       return "当前页面仍有未翻译标记";
     }
 
@@ -1735,7 +1745,10 @@ export function useTranslatorView() {
 
         try {
           if (!isReverting) {
-            await onlineWorkspaceStore.flushPageUnits(chapterID.value, targetPageID);
+            await onlineWorkspaceStore.flushPageUnits(
+              chapterID.value,
+              targetPageID,
+            );
             await completePageTranslation(targetPageID);
           } else {
             await revertPageTranslationCompletion(targetPageID);
@@ -1778,7 +1791,6 @@ export function useTranslatorView() {
 
     if (selectedUnitID.value) {
       clearSelectedUnit();
-      return;
     }
 
     void createUnitAtPointer(event, true);
@@ -1789,7 +1801,6 @@ export function useTranslatorView() {
 
     if (selectedUnitID.value) {
       clearSelectedUnit();
-      return;
     }
 
     void createUnitAtPointer(event, false);
@@ -2029,18 +2040,6 @@ export function useTranslatorView() {
     }
 
     performRemove();
-  }
-
-  /**
-   * 计算标记按钮位置。
-   */
-  function resolveMarkerStyle(
-    projectUnit: LocalProjectUnit,
-  ): Record<string, string> {
-    return {
-      left: `${projectUnit.x_coord * 100}%`,
-      top: `${projectUnit.y_coord * 100}%`,
-    };
   }
 
   /**
@@ -2304,6 +2303,13 @@ export function useTranslatorView() {
       return;
     }
     isDragging.value = false;
+    /* stageDragMoved 延迟重置——click 事件在 mouseup 之后触发，
+       如果立即清零，overlay click 会误判为未拖拽而创建标记。 */
+    if (stageDragMoved) {
+      requestAnimationFrame(() => {
+        stageDragMoved = false;
+      });
+    }
   }
 
   function handleGlobalMouseMove(event: MouseEvent): void {
@@ -2385,6 +2391,13 @@ export function useTranslatorView() {
     const unitID = draggingUnitID.value;
     const didMove = markerDragMoved;
     draggingUnitID.value = null;
+    /* markerDragMoved 延迟重置——同 stageDragMoved，
+       避免 mouseup 之后的 click 事件误创建标记。 */
+    if (markerDragMoved) {
+      requestAnimationFrame(() => {
+        markerDragMoved = false;
+      });
+    }
     if (event) {
       handleSelectUnit(unitID, !didMove);
     }
@@ -2535,21 +2548,17 @@ export function useTranslatorView() {
       return;
     }
 
-    if (
-      event.ctrlKey &&
-      !event.metaKey &&
-      !event.altKey &&
-      !event.shiftKey &&
-      !isShortcutBlocked
-    ) {
+    if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       if (event.key === "ArrowLeft") {
         event.preventDefault();
+        commitSelectedUnitEditing(event.target, true);
         moveToPreviousPage();
         return;
       }
 
       if (event.key === "ArrowRight") {
         event.preventDefault();
+        commitSelectedUnitEditing(event.target, true);
         moveToNextPage();
         return;
       }
@@ -2571,6 +2580,13 @@ export function useTranslatorView() {
     ) {
       event.preventDefault();
       focusActiveFieldLater();
+      return;
+    }
+
+    if (event.key === "Tab" && selectedTextareaTarget) {
+      event.preventDefault();
+      commitSelectedUnitEditing(event.target);
+      moveSelectedUnit(event.shiftKey ? -1 : 1);
       return;
     }
 
@@ -2692,7 +2708,6 @@ export function useTranslatorView() {
     isDarkTheme,
     selectedUnitID,
     resolveProofreadBubbleStyle,
-    resolveMarkerStyle,
     handleOverlayClick,
     handleOverlayContextMenu,
     handleSelectUnit,
@@ -2723,5 +2738,6 @@ export function useTranslatorView() {
     isWorkspaceLoading,
     workspaceLoadingTip,
     workspaceEmptyDescription,
+    translatorSettingsStore,
   };
 }

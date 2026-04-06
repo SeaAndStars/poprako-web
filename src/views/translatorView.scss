@@ -129,7 +129,8 @@
   box-shadow: none;
 }
 
-.translator-header__shortcut-trigger {
+.translator-header__shortcut-trigger,
+.translator-header__settings-trigger {
   flex: 0 0 auto;
   width: 30px;
   min-width: 30px;
@@ -143,7 +144,9 @@
 }
 
 .translator-header__shortcut-trigger:hover,
-.translator-header__shortcut-trigger:focus-visible {
+.translator-header__shortcut-trigger:focus-visible,
+.translator-header__settings-trigger:hover,
+.translator-header__settings-trigger:focus-visible {
   color: var(--text-primary, #374151);
   border-color: var(--control-btn-primary-border-hover, #8960ea);
   background: color-mix(
@@ -381,6 +384,39 @@
   line-height: 1.45;
 }
 
+/* ── 编辑器设置表单 ── */
+.translator-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 4px 0;
+}
+
+.translator-settings-form__item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.translator-settings-form__label {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary, #1e293b);
+}
+
+.translator-settings-form__hint {
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+  line-height: 1.5;
+}
+
+.translator-settings-form__value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #334155);
+  line-height: 1.3;
+}
+
 /* ── 主体 ── */
 .translator-body {
   flex: 1;
@@ -599,103 +635,6 @@
 }
 
 /* ── 标记圆点 — 匹配参考 Marker 样式 ── */
-.translator-marker {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 28px;
-  height: 28px;
-  margin-left: -14px;
-  margin-top: -14px;
-  border: 2.5px solid rgba(255, 255, 255, 0.5);
-  border-radius: 50%;
-  background: linear-gradient(135deg, #f9a8d4, #f472b6);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-  z-index: 10;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  line-height: 1;
-  user-select: none;
-  outline: none;
-  -webkit-appearance: none;
-  appearance: none;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.translator-marker.is-outbox {
-  background: linear-gradient(135deg, #fde047, #facc15);
-}
-
-/* 状态描边：已翻译 → 橙色 */
-.translator-marker.is-translated {
-  border-color: #fb923c;
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.25),
-    0 0 0 2px rgba(251, 146, 60, 0.3);
-}
-
-/* 状态描边：已校对 → 绿色 */
-.translator-marker.is-proofread {
-  border-color: #4ade80;
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.25),
-    0 0 0 2px rgba(74, 222, 128, 0.3);
-}
-
-.translator-marker:hover {
-  transform: scale(1.18);
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.4),
-    0 0 0 3px rgba(255, 255, 255, 0.3);
-  z-index: 20;
-}
-
-.translator-marker.is-active {
-  border-color: var(--control-btn-primary-border, #9b73f2);
-  transform: scale(1.08);
-  box-shadow:
-    0 4px 12px
-      color-mix(
-        in srgb,
-        var(--control-btn-primary-border, #9b73f2) 45%,
-        transparent
-      ),
-    0 0 0 2px
-      color-mix(
-        in srgb,
-        var(--control-btn-primary-border, #9b73f2) 24%,
-        transparent
-      );
-  z-index: 30;
-}
-
-.translator-marker.is-editing {
-  border-color: #22c55e;
-  transform: scale(1.08);
-  box-shadow:
-    0 4px 12px rgba(34, 197, 94, 0.32),
-    0 0 0 2px rgba(34, 197, 94, 0.18);
-  z-index: 31;
-}
-
-.translator-marker.is-dragging {
-  opacity: 0.8;
-  z-index: 40;
-  cursor: grabbing;
-  transition: none;
-}
-
 /* ── 右侧面板 ── */
 .translator-right-panel {
   width: 440px;
@@ -1394,19 +1333,6 @@
     box-shadow: inset 4px 0 0 0 rgba(253, 224, 71, 0.4);
   }
 
-  /* 标记圆点 */
-  .translator-marker {
-    background: linear-gradient(135deg, #c084fc, #a855f7);
-  }
-
-  .translator-marker.is-outbox {
-    background: linear-gradient(135deg, #fbbf24, #d97706);
-  }
-
-  .translator-marker.is-proofread {
-    background: linear-gradient(135deg, #34d399, #059669);
-  }
-
   .translator-proofread-bubble {
     border-color: rgba(75, 85, 99, 0.92);
     background: rgba(31, 41, 55, 0.96);
@@ -1430,6 +1356,19 @@
   /* 底部栏模式按钮 */
   .translator-footer__mode-btn:hover {
     background: rgba(100, 116, 139, 0.2);
+  }
+
+  /* 编辑器设置 */
+  .translator-settings-form__label {
+    color: var(--text-primary, #e2e8f0);
+  }
+
+  .translator-settings-form__hint {
+    color: var(--text-secondary, #9da8bb);
+  }
+
+  .translator-settings-form__value {
+    color: var(--text-primary, #e2e8f0);
   }
 }
 

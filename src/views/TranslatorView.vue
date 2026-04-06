@@ -131,6 +131,82 @@
         </a-dropdown>
 
         <a-button
+          size="small"
+          class="translator-header__settings-trigger"
+          title="编辑器设置"
+          aria-label="编辑器设置"
+          @click="isSettingsModalOpen = true"
+        >
+          <template #icon>
+            <SettingOutlined />
+          </template>
+        </a-button>
+
+        <a-modal
+          v-model:open="isSettingsModalOpen"
+          title="编辑器设置"
+          :footer="null"
+          :width="400"
+          :destroy-on-close="true"
+        >
+          <div class="translator-settings-form">
+            <div class="translator-settings-form__item">
+              <label class="translator-settings-form__label">
+                新建标记后行为
+              </label>
+              <a-radio-group
+                v-model:value="markerCreationBehaviorModel"
+                size="small"
+              >
+                <a-radio-button value="select">仅选中</a-radio-button>
+                <a-radio-button value="edit"> 选中并编辑 </a-radio-button>
+              </a-radio-group>
+              <div class="translator-settings-form__hint">
+                「仅选中」：创建后高亮标记但不打开文本框，适合先批量标号。
+              </div>
+            </div>
+
+            <div class="translator-settings-form__item">
+              <label class="translator-settings-form__label">
+                标记透明度
+              </label>
+              <a-slider
+                v-model:value="markerOpacitySliderDraft"
+                :min="30"
+                :max="100"
+                :step="5"
+                :tip-formatter="(val?: number) => `${val ?? 85}%`"
+                @afterChange="commitMarkerOpacityDraft"
+              />
+              <div class="translator-settings-form__value">
+                {{ markerOpacitySliderDraft }}%
+              </div>
+              <div class="translator-settings-form__hint">
+                降低透明度可减少标号对文字的遮挡。
+              </div>
+            </div>
+
+            <div class="translator-settings-form__item">
+              <label class="translator-settings-form__label"> 标记大小 </label>
+              <a-slider
+                v-model:value="markerSizeSliderDraft"
+                :min="16"
+                :max="44"
+                :step="2"
+                :tip-formatter="(val?: number) => `${val ?? 28}px`"
+                @afterChange="commitMarkerSizeDraft"
+              />
+              <div class="translator-settings-form__value">
+                {{ markerSizeSliderDraft }}px
+              </div>
+              <div class="translator-settings-form__hint">
+                调小标记圆点以减少对画面内容的遮挡。
+              </div>
+            </div>
+          </div>
+        </a-modal>
+
+        <a-button
           :disabled="currentPageIndex <= 0"
           size="small"
           @click="moveToPreviousPage"
@@ -290,28 +366,27 @@
                 {{ resolveFinalUnitText(projectUnit) }}
               </div>
 
-              <button
+              <TranslatorMarker
                 v-for="projectUnit in currentPageUnits"
-                :key="projectUnit.id"
-                type="button"
-                class="translator-marker"
-                :class="{
-                  'is-active': projectUnit.id === selectedUnitID,
-                  'is-editing': projectUnit.id === editingUnitID,
-                  'is-outbox': !projectUnit.is_bubble,
-                  'is-translated':
-                    isUnitTranslated(projectUnit) &&
-                    !isUnitProofread(projectUnit),
-                  'is-proofread': isUnitProofread(projectUnit),
-                  'is-dragging': draggingUnitID === projectUnit.id,
-                }"
-                :style="resolveMarkerStyle(projectUnit)"
-                @click.stop="handleSelectUnit(projectUnit.id)"
-                @contextmenu.prevent.stop="requestRemoveUnit(projectUnit.id)"
-                @mousedown.stop="handleMarkerDragStart($event, projectUnit.id)"
-              >
-                {{ projectUnit.index }}
-              </button>
+                :key="`${projectUnit.id}_${markerSizeSliderDraft}_${markerOpacitySliderDraft}`"
+                :index="projectUnit.index"
+                :x="projectUnit.x_coord"
+                :y="projectUnit.y_coord"
+                :size="markerSizeSliderDraft"
+                :opacity="markerOpacityValue"
+                :active="projectUnit.id === selectedUnitID"
+                :editing="projectUnit.id === editingUnitID"
+                :outbox="!projectUnit.is_bubble"
+                :translated="
+                  isUnitTranslated(projectUnit) && !isUnitProofread(projectUnit)
+                "
+                :proofread="isUnitProofread(projectUnit)"
+                :dragging="draggingUnitID === projectUnit.id"
+                :dark="isDarkTheme"
+                @select="handleSelectUnit(projectUnit.id)"
+                @request-remove="requestRemoveUnit(projectUnit.id)"
+                @drag-start="handleMarkerDragStart($event, projectUnit.id)"
+              />
             </div>
           </div>
         </div>
@@ -695,7 +770,14 @@
 </template>
 
 <script setup lang="ts">
-import { CheckOutlined, QuestionCircleOutlined } from "@ant-design/icons-vue";
+import {
+  CheckOutlined,
+  QuestionCircleOutlined,
+  SettingOutlined,
+} from "@ant-design/icons-vue";
+import { computed, ref, watch } from "vue";
+import TranslatorMarker from "../components/TranslatorMarker.vue";
+import type { MarkerCreationBehavior } from "../stores/translatorSettings";
 import { useTranslatorView } from "./useTranslatorView";
 
 type ShortcutKeyToken = {
@@ -765,7 +847,6 @@ const {
   isDarkTheme,
   selectedUnitID,
   resolveProofreadBubbleStyle,
-  resolveMarkerStyle,
   handleOverlayClick,
   handleOverlayContextMenu,
   handleSelectUnit,
@@ -796,7 +877,75 @@ const {
   isWorkspaceLoading,
   workspaceLoadingTip,
   workspaceEmptyDescription,
+  translatorSettingsStore,
 } = useTranslatorView();
+
+const isSettingsModalOpen = ref(false);
+
+const markerCreationBehaviorModel = computed<MarkerCreationBehavior>({
+  get: () => translatorSettingsStore.markerCreationBehavior,
+  set: (value) => {
+    translatorSettingsStore.setMarkerCreationBehavior(value);
+  },
+});
+
+const normalizedMarkerOpacity = computed<number>(() => {
+  const value = translatorSettingsStore.markerOpacity;
+  return typeof value === "number" && isFinite(value) ? value : 0.85;
+});
+
+const markerOpacitySliderDraft = ref(
+  Math.round(normalizedMarkerOpacity.value * 100),
+);
+
+const markerOpacityValue = computed<number>(
+  () => markerOpacitySliderDraft.value / 100,
+);
+
+const normalizedMarkerSize = computed<number>(() => {
+  const value = translatorSettingsStore.markerSize;
+  return typeof value === "number" && isFinite(value) ? value : 28;
+});
+
+const markerSizeSliderDraft = ref(normalizedMarkerSize.value);
+
+watch(normalizedMarkerOpacity, (value) => {
+  const nextPercent = Math.round(value * 100);
+
+  if (markerOpacitySliderDraft.value !== nextPercent) {
+    markerOpacitySliderDraft.value = nextPercent;
+  }
+});
+
+watch(normalizedMarkerSize, (value) => {
+  if (markerSizeSliderDraft.value !== value) {
+    markerSizeSliderDraft.value = value;
+  }
+});
+
+function commitMarkerOpacityDraft(value?: number | [number, number]): void {
+  const nextValue = Array.isArray(value)
+    ? value[0]
+    : (value ?? markerOpacitySliderDraft.value);
+
+  if (typeof nextValue !== "number" || !isFinite(nextValue)) {
+    return;
+  }
+
+  translatorSettingsStore.setMarkerOpacity(nextValue / 100);
+}
+
+function commitMarkerSizeDraft(value?: number | [number, number]): void {
+  const nextValue = Array.isArray(value)
+    ? value[0]
+    : (value ?? markerSizeSliderDraft.value);
+
+  if (typeof nextValue !== "number" || !isFinite(nextValue)) {
+    return;
+  }
+
+  translatorSettingsStore.setMarkerSize(nextValue);
+}
 </script>
 
 <style scoped src="./translatorView.scss" lang="scss"></style>

@@ -97,6 +97,11 @@ export type UpdateChapterResponse = void;
 export type ExportChapterManuscriptResponse = Blob;
 
 /**
+ * 导出章节交付包响应类型。
+ */
+export type ExportChapterManuscriptPackageResponse = Blob;
+
+/**
  * 删除章节响应类型。
  */
 export type DeleteChapterResponse = void;
@@ -159,4 +164,13 @@ export async function exportChapterManuscript(
   chapterID: string,
 ): Promise<ExportChapterManuscriptResponse> {
   return httpClient.getBlob(`/chapters/${chapterID}/manuscript.txt`);
+}
+
+/**
+ * 导出章节交付包，对应 GET /chapters/{chapter_id}/manuscript-package.zip。
+ */
+export async function exportChapterManuscriptPackage(
+  chapterID: string,
+): Promise<ExportChapterManuscriptPackageResponse> {
+  return httpClient.getBlob(`/chapters/${chapterID}/manuscript-package.zip`);
 }

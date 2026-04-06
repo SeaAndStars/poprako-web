@@ -5,7 +5,10 @@ import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { Modal, message } from "ant-design-vue";
 import { storeToRefs } from "pinia";
-import { exportChapterManuscript, getMyAssignments } from "../api/modules";
+import {
+  exportChapterManuscriptPackage,
+  getMyAssignments,
+} from "../api/modules";
 import { useLocalProjectsStore } from "../stores/localProjects";
 import type { AssignmentInfo } from "../types/domain";
 
@@ -101,6 +104,22 @@ function resolveProgressPercent(completed: number, total: number): number {
   }
 
   return Math.max(0, Math.min(100, Math.round((completed / total) * 100)));
+}
+
+function resolveMostRecentParticipationTimestamp(
+  assignmentInfo: AssignmentInfo,
+  roles: WorkspaceParticipationRole[],
+): number | undefined {
+  const chapterInfo = assignmentInfo.chapter;
+  const latestTimestamp = Math.max(
+    chapterInfo?.updated_at ?? 0,
+    chapterInfo?.created_at ?? 0,
+    assignmentInfo.updated_at ?? 0,
+    assignmentInfo.created_at ?? 0,
+    ...roles.map((roleInfo) => roleInfo.assignedAt ?? 0),
+  );
+
+  return latestTimestamp > 0 ? latestTimestamp : undefined;
 }
 
 export function formatParticipationTimestamp(timestamp?: number): string {
@@ -228,11 +247,13 @@ export function useDashboardView() {
         chapterInfo.translated_unit_count ?? existingEntry.translatedUnitCount;
       existingEntry.proofreadUnitCount =
         chapterInfo.proofread_unit_count ?? existingEntry.proofreadUnitCount;
+      const latestParticipationAt = resolveMostRecentParticipationTimestamp(
+        assignmentInfo,
+        roles,
+      );
       existingEntry.lastActiveAt = Math.max(
         existingEntry.lastActiveAt ?? 0,
-        assignmentInfo.updated_at ?? 0,
-        assignmentInfo.created_at ?? 0,
-        ...roles.map((roleInfo) => roleInfo.assignedAt ?? 0),
+        latestParticipationAt ?? 0,
       );
 
       for (const roleInfo of roles) {
@@ -416,7 +437,7 @@ export function useDashboardView() {
   function resolveManuscriptFileName(
     chapterEntry: WorkspaceParticipationEntry,
   ): string {
-    const rawFileName = `${chapterEntry.comicTitle}-${chapterEntry.chapterLabel}-译稿.txt`;
+    const rawFileName = `${chapterEntry.comicTitle}-${chapterEntry.chapterLabel}-交付包.zip`;
     return rawFileName.replace(/[\\/:*?"<>|]/g, "_");
   }
 
@@ -433,16 +454,18 @@ export function useDashboardView() {
     };
 
     try {
-      const chapterBlob = await exportChapterManuscript(chapterEntry.chapterId);
+      const chapterBlob = await exportChapterManuscriptPackage(
+        chapterEntry.chapterId,
+      );
       const objectURL = URL.createObjectURL(chapterBlob);
       const downloadLink = document.createElement("a");
       downloadLink.href = objectURL;
       downloadLink.download = resolveManuscriptFileName(chapterEntry);
       downloadLink.click();
       URL.revokeObjectURL(objectURL);
-      message.success("译稿已开始下载");
+      message.success("交付包已开始下载");
     } catch (error: unknown) {
-      message.error(error instanceof Error ? error.message : "译稿下载失败");
+      message.error(error instanceof Error ? error.message : "交付包下载失败");
     } finally {
       downloadingChapterIDs.value = {
         ...downloadingChapterIDs.value,
