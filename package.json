@@ -1,7 +1,8 @@
 {
   "name": "poprako-web-ms-frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.2",
+  "productName": "Poprako Desktop",
   "description": "Poprako 桌面客户端，面向漫画汉化团队协作管理。",
   "author": "Poprako Team",
   "type": "module",
@@ -25,9 +26,12 @@
     "preview:staging": "vite preview --mode staging",
     "preview:production": "vite preview --mode production",
     "electron:verify": "pnpm build:production:desktop",
+    "electron:verify:shell": "pnpm lint && pnpm type-check",
     "electron:package": "pnpm electron:verify && electron-forge package",
+    "electron:package:shell": "pnpm electron:verify:shell && cross-env POPRAKO_ELECTRON_PACKAGE_MODE=shell electron-forge package",
     "electron:make": "pnpm electron:verify && electron-forge make",
     "electron:make:win": "pnpm electron:verify && electron-forge make --platform=win32",
+    "electron:make:win:shell": "pnpm electron:verify:shell && cross-env POPRAKO_ELECTRON_PACKAGE_MODE=shell electron-forge make --platform=win32",
     "electron:make:mac": "pnpm electron:verify && electron-forge make --platform=darwin",
     "electron:make:linux": "pnpm electron:verify && electron-forge make --platform=linux",
     "electron:publish": "pnpm electron:verify && electron-forge publish"

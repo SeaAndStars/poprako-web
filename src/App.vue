@@ -61,8 +61,9 @@ const {
   setThemeDensity,
 } = useThemeProvider();
 const route = useRoute();
+const desktopCapabilities = window.poprakoDesktop?.capabilities;
 const isDesktopEnvironment = computed(() =>
-  Boolean(window.poprakoDesktop?.windowControls),
+  Boolean(desktopCapabilities?.windowControls),
 );
 const isAuthRoute = computed(() => {
   return route.name === "login" || route.name === "register";

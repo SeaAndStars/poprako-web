@@ -37,10 +37,22 @@ interface DesktopProjectDialog {
   readImageFile: (filePath: string) => Promise<string | null>;
 }
 
+interface DesktopBridgeCapabilities {
+  windowControls: boolean;
+  projectDialog: boolean;
+  remoteRendererReload: boolean;
+}
+
+interface DesktopShellBridge {
+  reloadRemoteRenderer: () => Promise<boolean>;
+}
+
 /**
  * Electron 预加载脚本注入到渲染层的桥接对象。
  */
 interface PoprakoDesktopBridge {
+  apiVersion: string;
+  capabilities: DesktopBridgeCapabilities;
   platform: string;
   versions: {
     electron: string;
@@ -49,6 +61,7 @@ interface PoprakoDesktopBridge {
   };
   windowControls?: DesktopWindowControls;
   projectDialog?: DesktopProjectDialog;
+  shell?: DesktopShellBridge;
 }
 
 interface Window {

@@ -11,6 +11,7 @@ import {
 } from "../api/modules";
 import { useLocalProjectsStore } from "../stores/localProjects";
 import type { AssignmentInfo } from "../types/domain";
+import { parsePageRange } from "../utils/pageRange";
 
 export type WorkspaceParticipationMode = "translate" | "proofread";
 type WorkspaceParticipationRoleMode = WorkspaceParticipationMode | "typeset";
@@ -141,6 +142,15 @@ export function useDashboardView() {
   const onlineAssignmentsErrorMessage = ref("");
   const myAssignments = ref<AssignmentInfo[]>([]);
   const downloadingChapterIDs = ref<Record<string, boolean>>({});
+
+  // 嵌字下载弹窗状态：支持选择全部页或自定义页码范围。
+  const downloadModalOpen = ref(false);
+  const downloadModalChapter = ref<WorkspaceParticipationEntry | null>(null);
+  const downloadModalMode = ref<"all" | "range">("all");
+  const downloadModalRangeInput = ref("");
+  const downloadModalRangeError = ref("");
+  // 是否同时下载图源，默认 false（交付包体积较小）。
+  const downloadModalIncludeImages = ref(false);
 
   const normalizedSearchKeyword = computed(() =>
     searchKeyword.value.trim().toLowerCase(),
@@ -448,6 +458,19 @@ export function useDashboardView() {
       return;
     }
 
+    downloadModalChapter.value = chapterEntry;
+    downloadModalMode.value = "all";
+    downloadModalRangeInput.value = "";
+    downloadModalRangeError.value = "";
+    downloadModalIncludeImages.value = false;
+    downloadModalOpen.value = true;
+  }
+
+  async function performChapterManuscriptDownload(
+    chapterEntry: WorkspaceParticipationEntry,
+    pageRange: string | undefined,
+    includeImages: boolean,
+  ): Promise<void> {
     downloadingChapterIDs.value = {
       ...downloadingChapterIDs.value,
       [chapterEntry.chapterId]: true,
@@ -456,6 +479,8 @@ export function useDashboardView() {
     try {
       const chapterBlob = await exportChapterManuscriptPackage(
         chapterEntry.chapterId,
+        pageRange,
+        includeImages,
       );
       const objectURL = URL.createObjectURL(chapterBlob);
       const downloadLink = document.createElement("a");
@@ -472,6 +497,56 @@ export function useDashboardView() {
         [chapterEntry.chapterId]: false,
       };
     }
+  }
+
+  async function confirmDownloadModal(): Promise<void> {
+    const chapterEntry = downloadModalChapter.value;
+    if (!chapterEntry) {
+      downloadModalOpen.value = false;
+      return;
+    }
+
+    let pageRange: string | undefined;
+
+    if (downloadModalMode.value === "range") {
+      const trimmed = downloadModalRangeInput.value.trim();
+      const parseResult = parsePageRange(trimmed);
+      if (parseResult.error) {
+        downloadModalRangeError.value = parseResult.error;
+        return;
+      }
+
+      const totalPages = chapterEntry.pageCount;
+      if (totalPages > 0) {
+        const outOfRange = parseResult.pages.filter(
+          (page) => page > totalPages,
+        );
+        if (outOfRange.length > 0) {
+          downloadModalRangeError.value = `以下页码超出本章节范围（共 ${totalPages} 页）：${outOfRange.join(", ")}`;
+          return;
+        }
+      }
+
+      downloadModalRangeError.value = "";
+      pageRange = trimmed;
+    }
+
+    downloadModalOpen.value = false;
+    const targetEntry = chapterEntry;
+    const includeImages = downloadModalIncludeImages.value;
+    downloadModalChapter.value = null;
+
+    await performChapterManuscriptDownload(
+      targetEntry,
+      pageRange,
+      includeImages,
+    );
+  }
+
+  function cancelDownloadModal(): void {
+    downloadModalOpen.value = false;
+    downloadModalChapter.value = null;
+    downloadModalRangeError.value = "";
   }
 
   function handleProjectCreated(projectID: string): void {
@@ -523,6 +598,14 @@ export function useDashboardView() {
     onlineParticipationEmptyText,
     onlineParticipations,
     downloadingChapterIDs,
+    downloadModalOpen,
+    downloadModalChapter,
+    downloadModalMode,
+    downloadModalRangeInput,
+    downloadModalRangeError,
+    downloadModalIncludeImages,
+    confirmDownloadModal,
+    cancelDownloadModal,
     projects,
     searchKeyword,
     summaryCards,

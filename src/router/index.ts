@@ -90,7 +90,7 @@ const routes: RouteRecordRaw[] = [
  */
 const isDesktopRuntime =
   typeof window !== "undefined" &&
-  Boolean(window.poprakoDesktop?.windowControls);
+  Boolean(window.poprakoDesktop?.capabilities?.windowControls);
 
 /**
  * 创建路由实例。

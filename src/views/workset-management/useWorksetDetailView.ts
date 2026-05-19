@@ -123,7 +123,7 @@ function hasRoleSlotOccupant(
 }
 
 function roleAllowsMultipleOccupants(roleValue: number): boolean {
-  return roleValue === ROLE_TRANSLATOR;
+  return roleValue === ROLE_TRANSLATOR || roleValue === ROLE_TYPESETTER;
 }
 
 function resolveAssignmentRoleMask(assignment: AssignmentInfo): number {

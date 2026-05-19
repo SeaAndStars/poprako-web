@@ -777,7 +777,7 @@
                         {{ resolveUserDisplayName(occupant, occupant.id) }}
                       </div>
                       <div class="role-manager__current-meta">
-                        支持多人翻译，可单独移除当前成员
+                        支持多人协作，可单独移除当前成员
                       </div>
                     </div>
                   </div>

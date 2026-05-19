@@ -28,6 +28,8 @@ export interface ReserveChapterPagesArgs {
   page_count: number;
   /** 上传文件扩展名。 */
   extension: string;
+  /** 与上传文件对应的原始文件名（可选，用于嵌字导出命名对齐）。 */
+  source_file_names?: string[];
 }
 
 /**

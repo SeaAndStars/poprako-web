@@ -104,6 +104,7 @@ import type {
 } from "../../types/domain";
 
 const TRANSLATOR_ROLE_VALUE = 2;
+const TYPESETTER_ROLE_VALUE = 8;
 
 const props = defineProps<{
   roleLabel: string;
@@ -178,7 +179,9 @@ const hasMyPendingRequest = computed(() =>
   Boolean(props.roleSlot.my_pending_request_id),
 );
 const allowsMultipleOccupants = computed(
-  () => props.roleValue === TRANSLATOR_ROLE_VALUE,
+  () =>
+    props.roleValue === TRANSLATOR_ROLE_VALUE ||
+    props.roleValue === TYPESETTER_ROLE_VALUE,
 );
 const currentUserAssigned = computed(() => {
   if (!props.currentUserId) {

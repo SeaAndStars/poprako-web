@@ -86,7 +86,7 @@ export const TRANSLATOR_SHORTCUT_ACTION_DEFINITIONS: Record<
     description: "提交当前文本框内容并退出编辑状态。",
     helpText: "提交当前编辑",
     sectionTitle: "标点操作",
-    defaultBinding: "Enter",
+    defaultBinding: "Shift+Enter",
   },
   exitEditing: {
     id: "exitEditing",
@@ -163,7 +163,8 @@ export interface ShortcutBindingUpdateResult {
 
 const DEFAULT_SHORTCUT_BINDINGS = TRANSLATOR_SHORTCUT_ACTION_ORDER.reduce(
   (bindings, actionId) => {
-    bindings[actionId] = TRANSLATOR_SHORTCUT_ACTION_DEFINITIONS[actionId].defaultBinding;
+    bindings[actionId] =
+      TRANSLATOR_SHORTCUT_ACTION_DEFINITIONS[actionId].defaultBinding;
     return bindings;
   },
   {} as TranslatorShortcutBindings,
@@ -573,7 +574,9 @@ export const useTranslatorSettingsStore = defineStore(
     function isShortcutBindingDefault(
       actionId: TranslatorShortcutActionId,
     ): boolean {
-      return shortcutBindings.value[actionId] === DEFAULT_SHORTCUT_BINDINGS[actionId];
+      return (
+        shortcutBindings.value[actionId] === DEFAULT_SHORTCUT_BINDINGS[actionId]
+      );
     }
 
     function matchesShortcutBinding(

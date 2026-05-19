@@ -182,7 +182,9 @@
 
               <div class="workspace-online-card__actions">
                 <a-button
-                  v-for="role in chapterEntry.roles.filter(isWorkspaceEnterRole)"
+                  v-for="role in chapterEntry.roles.filter(
+                    isWorkspaceEnterRole,
+                  )"
                   :key="`${chapterEntry.chapterId}-${role.mode}`"
                   size="small"
                   :type="role.mode === 'translate' ? 'primary' : 'default'"
@@ -193,7 +195,9 @@
                 <a-button
                   v-if="chapterEntry.canDownloadManuscript"
                   size="small"
-                  :loading="Boolean(downloadingChapterIDs[chapterEntry.chapterId])"
+                  :loading="
+                    Boolean(downloadingChapterIDs[chapterEntry.chapterId])
+                  "
                   @click="handleDownloadChapterManuscript(chapterEntry)"
                 >
                   下载译稿
@@ -261,6 +265,54 @@
       @cancel="createModalOpen = false"
       @created="handleProjectCreated"
     />
+
+    <a-modal
+      :open="downloadModalOpen"
+      title="下载嵌字译稿"
+      ok-text="下载"
+      cancel-text="取消"
+      :confirm-loading="
+        downloadModalChapter
+          ? Boolean(downloadingChapterIDs[downloadModalChapter.chapterId])
+          : false
+      "
+      @ok="confirmDownloadModal"
+      @cancel="cancelDownloadModal"
+    >
+      <div v-if="downloadModalChapter" class="download-modal-body">
+        <p class="download-modal-summary">
+          {{ downloadModalChapter.comicTitle }} ·
+          {{ downloadModalChapter.chapterLabel }}
+          <span v-if="downloadModalChapter.pageCount > 0">
+            （共 {{ downloadModalChapter.pageCount }} 页）
+          </span>
+        </p>
+        <a-radio-group v-model:value="downloadModalMode">
+          <a-radio value="all">全部页</a-radio>
+          <a-radio value="range">指定页码范围</a-radio>
+        </a-radio-group>
+        <div v-if="downloadModalMode === 'range'" class="download-modal-range">
+          <a-input
+            v-model:value="downloadModalRangeInput"
+            placeholder="例如：1-5, 8, 10-12"
+            allow-clear
+            @input="downloadModalRangeError = ''"
+            @press-enter="confirmDownloadModal"
+          />
+          <p class="download-modal-hint">
+            使用逗号分隔单页或区间，页码从 1 开始。
+          </p>
+          <p v-if="downloadModalRangeError" class="download-modal-error">
+            {{ downloadModalRangeError }}
+          </p>
+        </div>
+        <div class="download-modal-images">
+          <a-checkbox v-model:checked="downloadModalIncludeImages">
+            同时下载图源（体积较大）
+          </a-checkbox>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -288,6 +340,14 @@ const {
   onlineParticipationEmptyText,
   onlineParticipations,
   downloadingChapterIDs,
+  downloadModalOpen,
+  downloadModalChapter,
+  downloadModalMode,
+  downloadModalRangeInput,
+  downloadModalRangeError,
+  downloadModalIncludeImages,
+  confirmDownloadModal,
+  cancelDownloadModal,
   projects,
   searchKeyword,
   summaryCards,

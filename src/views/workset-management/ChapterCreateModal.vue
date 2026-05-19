@@ -349,6 +349,7 @@ async function handleSubmit(): Promise<void> {
       chapter_id: createdChapter.id,
       page_count: selectedFiles.length,
       extension: normalizedExtensions[0],
+      source_file_names: selectedFiles.map((file) => file.name),
     });
 
     if (reserveResult.creations.length !== selectedFiles.length) {

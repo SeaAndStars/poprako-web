@@ -309,7 +309,8 @@ function buildRemotePageRecord(
   pageInfo: PageInfo,
   displayIndex: number,
 ): OnlineWorkspacePageRecord {
-  const pageName = resolvePageDisplayName(displayIndex);
+  const sourceLabel = pageInfo.source_file_name?.trim();
+  const pageName = sourceLabel || resolvePageDisplayName(displayIndex);
 
   return {
     id: pageInfo.id,
@@ -562,6 +563,8 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
       for (let index = 0; index < sortedPages.length; index += 1) {
         const pageInfo = sortedPages[index];
         const displayIndex = index + 1;
+        const sourceLabel = pageInfo.source_file_name?.trim();
+        const displayPageName = sourceLabel || resolvePageDisplayName(displayIndex);
         const shouldPreload = displayIndex <= ONLINE_INITIAL_PRELOAD_PAGE_COUNT;
         const existingPageRecord = existingPageMap.get(pageInfo.id);
         const nextRemoteUrl = pageInfo.image_url ?? undefined;
@@ -573,7 +576,7 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
           let reusedPageRecord: OnlineWorkspacePageRecord = {
             ...existingPageRecord,
             index: displayIndex,
-            name: resolvePageDisplayName(displayIndex),
+            name: displayPageName,
             total_unit_count: Math.max(
               pageInfo.total_unit_count ?? existingPageRecord.total_unit_count,
               0,
@@ -584,12 +587,12 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
               existingPageRecord.image_source.kind === "web-remote"
                 ? {
                     ...existingPageRecord.image_source,
-                    name: resolvePageDisplayName(displayIndex),
+                    name: displayPageName,
                     remote_url: nextRemoteUrl ?? "",
                   }
                 : {
                     ...existingPageRecord.image_source,
-                    name: resolvePageDisplayName(displayIndex),
+                    name: displayPageName,
                   },
           };
 

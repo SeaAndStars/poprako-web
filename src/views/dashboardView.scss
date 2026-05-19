@@ -415,3 +415,32 @@ html[data-theme="dark"] .workspace-layout .workspace-online-card__progress-block
 html[data-theme="dark"] .workspace-layout .workspace-header__title {
   color: var(--text-primary);
 }
+.download-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.download-modal-summary {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.download-modal-range {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.download-modal-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.download-modal-error {
+  margin: 0;
+  color: var(--ant-color-error, #ff4d4f);
+  font-size: 12px;
+}

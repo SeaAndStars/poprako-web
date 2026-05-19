@@ -433,6 +433,8 @@ export interface PageInfo {
   chapter_id: string;
   /** 页面索引。 */
   index: number;
+  /** 上传时的原始文件名（可选）。 */
+  source_file_name?: string;
   /** 页面图片 URL。 */
   image_url?: string;
 

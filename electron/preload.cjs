@@ -7,6 +7,13 @@ const {
     ipcRenderer,
 } = require("electron");
 
+const DESKTOP_BRIDGE_API_VERSION = "1.0.0";
+const desktopCapabilities = Object.freeze({
+    windowControls: true,
+    projectDialog: true,
+    remoteRendererReload: true,
+});
+
 /**
  * 绑定最大化状态变化监听。
  * 返回值用于在组件销毁时解除订阅，避免内存泄漏。
@@ -30,6 +37,8 @@ function onMaximizeChanged(callback) {
 contextBridge.exposeInMainWorld(
     "poprakoDesktop",
     Object.freeze({
+        apiVersion: DESKTOP_BRIDGE_API_VERSION,
+        capabilities: desktopCapabilities,
         platform: process.platform,
         versions: {
             electron: process.versions.electron,
@@ -48,6 +57,10 @@ contextBridge.exposeInMainWorld(
                 ipcRenderer.invoke("project:select-image-directory"),
             readImageFile: (filePath) =>
                 ipcRenderer.invoke("project:read-image-file", filePath),
+        }),
+        shell: Object.freeze({
+            reloadRemoteRenderer: () =>
+                ipcRenderer.invoke("shell:reload-remote-renderer"),
         }),
     }),
 );

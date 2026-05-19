@@ -107,13 +107,82 @@ pnpm electron:make:mac
 pnpm electron:make:linux
 ```
 
+如果只想构建远程 Web 壳层，而不再把完整前端渲染资源打进 Electron 包，可使用 shell-only 构建：
+
+```bash
+# Windows 远程壳打包（推荐给线上 Electron 客户端）
+pnpm electron:make:win:shell
+
+# 仅本地打包壳层目录
+pnpm electron:package:shell
+```
+
 说明：
 
 - Forge 已配置三端 Maker：
-  - Windows：Squirrel
+  - Windows：Squirrel（Setup.exe / Setup.msi + RELEASES / nupkg）
   - macOS：ZIP
   - Linux：DEB / RPM
 - 跨平台构建通常建议在对应系统执行（例如 macOS 产物建议在 macOS Runner 构建）。
+- `electron:make:win:shell` 会在打包临时目录中裁剪为白名单内容，只保留 `package.json`、`.env.production` 以及 `electron/` 下的主进程、preload、回退页和运行时配置，不再把完整 `dist/`、`src/`、`node_modules/` 和其他开发文件打进安装包。
+
+### 4.2.1 Electron 远程渲染入口
+
+当设置以下环境变量后，打包后的 Electron 会优先加载线上站点，而不是本地 `dist/index.html`：
+
+```bash
+POPRAKO_RENDERER_REMOTE_URL=https://lpn.seastarss.cn
+```
+
+当前推荐的生产模式是：
+
+- 业务页面、样式和大多数功能改动：只发布到 `https://lpn.seastarss.cn`
+- Electron 主进程、preload、本地文件能力和壳层更新逻辑变动：才重新发布 Electron 安装包
+- 远程站点不可达时：Electron 自动切回本地回退页，而不是直接空白
+
+### 4.3 Windows MSI 首装与增量更新
+
+当前 Windows 桌面端采用以下策略：
+
+- 首次安装：使用 `pnpm electron:make:win` 生成的 MSI 分发。
+- 后续更新：客户端运行后读取对象存储或 CDN 上的 Squirrel 更新源，通过 `RELEASES + *.nupkg` 执行后台增量更新。
+
+推荐把 Windows 产物发布到固定目录，例如：
+
+```text
+https://cdn.example.com/poprako/stable/win32/x64/
+```
+
+目录下至少应包含：
+
+- `Poprako Desktop Setup.msi`
+- `Poprako Desktop Setup.exe`
+- `RELEASES`
+- `*.nupkg`
+
+构建与运行时会读取以下环境变量：
+
+```bash
+# 打包后的桌面客户端从这里检查更新
+POPRAKO_DESKTOP_UPDATE_BASE_URL=https://cdn.example.com/poprako/stable/win32/x64
+
+# 构建下一版 Windows 安装包时，从这里拉取历史 RELEASES 以生成 delta 包
+POPRAKO_DESKTOP_REMOTE_RELEASES_URL=https://cdn.example.com/poprako/stable/win32/x64
+
+# 是否在打包后的桌面客户端自动检查更新
+POPRAKO_DESKTOP_AUTO_UPDATE=true
+
+# 自动检查更新间隔（分钟）
+POPRAKO_DESKTOP_UPDATE_INTERVAL_MINUTES=60
+```
+
+说明：
+
+- `POPRAKO_DESKTOP_UPDATE_BASE_URL` 指向包含 `RELEASES` 的最终目录，而不是站点根目录。
+- `POPRAKO_DESKTOP_REMOTE_RELEASES_URL` 用于打包时生成 delta 包；如果不填，将回退到 `POPRAKO_DESKTOP_UPDATE_BASE_URL`。
+- 首次安装后的第一次启动会因 Squirrel 文件锁自动延后首次检查，避免 `--squirrel-firstrun` 阶段报错。
+- 从“完整渲染层内置包”首次切换到“远程 Web 壳包”时，生成的首个 delta 仍可能较大；完成这次迁移后，后续只改 Web 业务页面时通常不需要重新发布桌面包。
+- 若未开启 `POPRAKO_DESKTOP_AUTO_UPDATE` 或未配置更新源，客户端会跳过自动更新初始化，但不影响正常启动。
 
 ## 5. Electron Forge 发布（GitHub Release）
 
@@ -135,6 +204,7 @@ pnpm electron:publish
 
 - 发布器采用 `@electron-forge/publisher-github`。
 - 若未配置 `ELECTRON_GITHUB_OWNER` 和 `ELECTRON_GITHUB_REPO`，将不会注入发布器。
+- 当前 Windows 自动更新主路径默认面向对象存储或 CDN；GitHub Release 更适合作为备用发布通道。
 
 ## 6. API 层约定（与后端 Swagger 对齐）
 

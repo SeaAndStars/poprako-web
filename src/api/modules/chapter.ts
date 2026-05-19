@@ -162,15 +162,33 @@ export async function deleteChapter(
  */
 export async function exportChapterManuscript(
   chapterID: string,
+  pageRange?: string,
 ): Promise<ExportChapterManuscriptResponse> {
-  return httpClient.getBlob(`/chapters/${chapterID}/manuscript.txt`);
+  return httpClient.getBlob(
+    `/chapters/${chapterID}/manuscript.txt`,
+    pageRange ? { pages: pageRange } : undefined,
+  );
 }
 
 /**
  * 导出章节交付包，对应 GET /chapters/{chapter_id}/manuscript-package.zip。
+ * includeImages 默认 false；为 true 时交付包内会额外附带图源 zip。
  */
 export async function exportChapterManuscriptPackage(
   chapterID: string,
+  pageRange?: string,
+  includeImages?: boolean,
 ): Promise<ExportChapterManuscriptPackageResponse> {
-  return httpClient.getBlob(`/chapters/${chapterID}/manuscript-package.zip`);
+  const params: Record<string, string> = {};
+  if (pageRange) {
+    params.pages = pageRange;
+  }
+  if (includeImages) {
+    params.include_images = "true";
+  }
+  const hasParams = Object.keys(params).length > 0;
+  return httpClient.getBlob(
+    `/chapters/${chapterID}/manuscript-package.zip`,
+    hasParams ? params : undefined,
+  );
 }
