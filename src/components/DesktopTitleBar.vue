@@ -307,7 +307,7 @@ import {
 } from "@ant-design/icons-vue";
 import { useRoute, useRouter } from "vue-router";
 import AvatarCropUpload from "./AvatarCropUpload.vue";
-import { getCurrentUserProfile, updateUserProfile } from "../api/modules";
+import { updateUserProfile } from "../api/modules";
 import { appendCacheBustQueryToUrl } from "../api/objectStorage";
 import { useBlobAssetUrlCache } from "../composables/useBlobAssetUrlCache";
 import type { UserInfo } from "../types/domain";
@@ -542,7 +542,12 @@ async function syncTitleBarProfile(): Promise<void> {
   }
 
   try {
-    const nextCurrentUserProfile = await getCurrentUserProfile();
+    const nextCurrentUserProfile = await authStore.ensureCurrentUserProfileLoaded();
+    if (!nextCurrentUserProfile) {
+      currentUserProfile.value = null;
+      titleBarProfile.value = null;
+      return;
+    }
     currentUserProfile.value = nextCurrentUserProfile;
     authStore.setCurrentUserProfile(nextCurrentUserProfile);
     titleBarProfile.value = {

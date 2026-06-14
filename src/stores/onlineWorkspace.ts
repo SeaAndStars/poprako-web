@@ -352,6 +352,8 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
     string,
     Promise<OnlineWorkspacePageRecord>
   >();
+  /** 整章 units 预取任务，按 chapterID 去重并供 loadPageUnits 等待。 */
+  const chapterUnitsPrefetchByChapterID = new Map<string, Promise<void>>();
   /** 最近一次页面图片加载失败原因，按 chapterID:pageID 记录。 */
   const lastImageErrorReasonByPageKey = ref<
     Record<string, OnlineWorkspaceImageErrorReason>
@@ -677,6 +679,28 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
     }
   }
 
+  /**
+   * 调度整章 units 预取；同章节复用同一 Promise，避免与 loadPageUnits 竞态。
+   */
+  function scheduleChapterUnitsPrefetch(
+    chapterID: string,
+    pages: OnlineWorkspacePageRecord[],
+  ): Promise<void> {
+    const existingJob = chapterUnitsPrefetchByChapterID.get(chapterID);
+    if (existingJob) {
+      return existingJob;
+    }
+
+    const prefetchJob = prefetchChapterUnits(chapterID, pages).finally(() => {
+      if (chapterUnitsPrefetchByChapterID.get(chapterID) === prefetchJob) {
+        chapterUnitsPrefetchByChapterID.delete(chapterID);
+      }
+    });
+
+    chapterUnitsPrefetchByChapterID.set(chapterID, prefetchJob);
+    return prefetchJob;
+  }
+
   async function ensureChapterWorkspace(
     args: EnsureOnlineWorkspaceArgs,
   ): Promise<OnlineWorkspaceRecord> {
@@ -788,6 +812,10 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
       }
 
       const nowISO = new Date().toISOString();
+      const prefetchPromise = scheduleChapterUnitsPrefetch(
+        args.chapter_id,
+        nextPages,
+      );
       const workspaceRecord: OnlineWorkspaceRecord = {
         id: buildWorkspaceID(args.chapter_id),
         workspace_kind: "online",
@@ -812,7 +840,7 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
       };
 
       setWorkspaceRecord(workspaceRecord);
-      await prefetchChapterUnits(args.chapter_id, nextPages);
+      await prefetchPromise;
       return workspaceRecord;
     } finally {
       setChapterLoading(args.chapter_id, false);
@@ -855,6 +883,26 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
       return cloneUnits(
         currentWorkingUnits.length > 0 ? currentWorkingUnits : currentBaseUnits,
       );
+    }
+
+    const prefetchJob = chapterUnitsPrefetchByChapterID.get(chapterID);
+    if (prefetchJob) {
+      await prefetchJob.catch(() => undefined);
+
+      if (pageID in baseUnitsByPageID.value) {
+        const prefetchedBaseUnits = baseUnitsByPageID.value[pageID] ?? [];
+        const prefetchedWorkingUnits = workingUnitsByPageID.value[pageID] ?? [];
+
+        if (prefetchedWorkingUnits.length > 0) {
+          return cloneUnits(prefetchedWorkingUnits);
+        }
+
+        workingUnitsByPageID.value = {
+          ...workingUnitsByPageID.value,
+          [pageID]: cloneUnits(prefetchedBaseUnits),
+        };
+        return cloneUnits(prefetchedBaseUnits);
+      }
     }
 
     const remoteUnits = await loadRemotePageUnits(

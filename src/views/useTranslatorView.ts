@@ -53,7 +53,6 @@ import { useRoute, useRouter } from "vue-router";
 import {
   completePageTranslation,
   getAssignmentList,
-  getCurrentUserProfile,
   getUserProfileByID,
   revertPageTranslationCompletion,
 } from "../api/modules";
@@ -2647,7 +2646,7 @@ export function useTranslatorView() {
     }
 
     try {
-      currentUserProfile.value = await getCurrentUserProfile();
+      currentUserProfile.value = await authStore.ensureCurrentUserProfileLoaded();
       if (currentUserProfile.value) {
         setRelatedUserProfile(currentUserProfile.value);
         rememberCollaboratorIdentity({
