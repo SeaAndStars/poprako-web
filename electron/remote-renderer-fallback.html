@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Poprako 桌面壳连接失败</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at top, rgba(59, 130, 246, 0.28), transparent 42%),
+        linear-gradient(160deg, #0f172a 0%, #111827 100%);
+    }
+
+    .panel {
+      width: min(560px, calc(100vw - 40px));
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 18px;
+      padding: 24px;
+      background: rgba(15, 23, 42, 0.82);
+      box-shadow: 0 18px 60px rgba(15, 23, 42, 0.38);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 22px;
+    }
+
+    p {
+      margin: 0;
+      line-height: 1.6;
+      color: #cbd5e1;
+    }
+
+    .meta {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.52);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .meta dt {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+
+    .meta dd {
+      margin: 0 0 12px;
+      font-size: 13px;
+      word-break: break-all;
+    }
+
+    .meta dd:last-child {
+      margin-bottom: 0;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    button,
+    a {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 16px;
+      font-size: 14px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform 120ms ease, opacity 120ms ease;
+    }
+
+    button:hover,
+    a:hover {
+      transform: translateY(-1px);
+      opacity: 0.95;
+    }
+
+    .primary {
+      background: #2563eb;
+      color: #eff6ff;
+    }
+
+    .secondary {
+      background: rgba(148, 163, 184, 0.16);
+      color: #e2e8f0;
+    }
+  </style>
+</head>
+
+<body>
+  <main class="panel">
+    <h1>远程页面暂时不可用</h1>
+    <p>
+      当前桌面壳已改为优先加载线上页面。如果站点暂时不可达，应用会显示这个本地回退页，避免直接空白。
+    </p>
+
+    <dl class="meta">
+      <dt>目标站点</dt>
+      <dd id="remote-url">未配置</dd>
+      <dt>失败地址</dt>
+      <dd id="failed-url">未提供</dd>
+      <dt>错误信息</dt>
+      <dd id="error-text">未知错误</dd>
+    </dl>
+
+    <div class="actions">
+      <button id="retry-button" type="button" class="primary">重试应用内加载</button>
+      <a id="browser-link" class="secondary" href="#">在默认浏览器打开</a>
+      <button id="close-button" type="button" class="secondary">关闭应用</button>
+    </div>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const remoteUrl = params.get("remoteUrl") || "";
+    const failedUrl = params.get("failedUrl") || "未提供";
+    const errorCode = params.get("errorCode") || "";
+    const errorDescription = params.get("errorDescription") || "未知错误";
+
+    document.getElementById("remote-url").textContent = remoteUrl || "未配置";
+    document.getElementById("failed-url").textContent = failedUrl;
+    document.getElementById("error-text").textContent = errorCode ?
+      `${errorDescription} (${errorCode})` :
+      errorDescription;
+
+    const browserLink = document.getElementById("browser-link");
+    if (remoteUrl) {
+      browserLink.setAttribute("href", remoteUrl);
+    } else {
+      browserLink.setAttribute("aria-disabled", "true");
+      browserLink.removeAttribute("href");
+      browserLink.style.pointerEvents = "none";
+      browserLink.style.opacity = "0.45";
+    }
+
+    document.getElementById("retry-button").addEventListener("click", async () => {
+      const shellBridge = window.poprakoDesktop?.shell;
+      if (!shellBridge?.reloadRemoteRenderer) {
+        return;
+      }
+
+      const retryButton = document.getElementById("retry-button");
+      retryButton.textContent = "正在重试...";
+      retryButton.disabled = true;
+
+      try {
+        const ok = await shellBridge.reloadRemoteRenderer();
+        if (!ok) {
+          retryButton.textContent = "重试应用内加载";
+          retryButton.disabled = false;
+        }
+      } catch {
+        retryButton.textContent = "重试应用内加载";
+        retryButton.disabled = false;
+      }
+    });
+
+    document.getElementById("close-button").addEventListener("click", () => {
+      window.poprakoDesktop?.windowControls?.close?.();
+    });
+  </script>
+</body>
+
+</html>

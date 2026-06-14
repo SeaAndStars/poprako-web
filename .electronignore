@@ -1,0 +1,15 @@
+# Electron 打包排除清单（与 forge.config.cjs packagerIgnorePatterns 保持一致）
+src
+scripts
+.github
+out
+README.md
+eslint.config.mjs
+tsconfig*.json
+vite.config.ts
+pnpm-lock.yaml
+.env.development
+.env.test
+.env.staging
+.env.example
+.env.production.example

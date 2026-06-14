@@ -15,6 +15,7 @@ import {
 } from "../api/modules";
 import {
   deleteWebProjectImageAssets,
+  hasWebProjectImageAsset,
   storeWebProjectImageAssetBlob,
 } from "../local-project/assets";
 import { resolveAssetUrl } from "../api/objectStorage";
@@ -30,6 +31,13 @@ const ONLINE_PAGE_SAVE_DEBOUNCE_MS = 450;
 const ONLINE_INITIAL_PRELOAD_PAGE_COUNT = 3;
 const ONLINE_PAGE_PREFETCH_LOOKAHEAD = 2;
 const ONLINE_PAGE_UNIT_FETCH_BATCH_SIZE = 500;
+
+/** 在线页面图片加载失败原因，供翻译器空态文案区分展示。 */
+export type OnlineWorkspaceImageErrorReason =
+  | "missing_remote_url"
+  | "remote_fetch_failed"
+  | "invalid_remote_content"
+  | "cache_resolve_failed";
 
 type RemoteIndexBase = 0 | 1;
 
@@ -344,6 +352,49 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
     string,
     Promise<OnlineWorkspacePageRecord>
   >();
+  /** 最近一次页面图片加载失败原因，按 chapterID:pageID 记录。 */
+  const lastImageErrorReasonByPageKey = ref<
+    Record<string, OnlineWorkspaceImageErrorReason>
+  >({});
+
+  function buildPageImageErrorKey(chapterID: string, pageID: string): string {
+    return `${chapterID}:${pageID}`;
+  }
+
+  function setPageImageErrorReason(
+    chapterID: string,
+    pageID: string,
+    reason: OnlineWorkspaceImageErrorReason | null,
+  ): void {
+    const pageKey = buildPageImageErrorKey(chapterID, pageID);
+
+    if (!reason) {
+      if (!(pageKey in lastImageErrorReasonByPageKey.value)) {
+        return;
+      }
+
+      const nextReasonMap = { ...lastImageErrorReasonByPageKey.value };
+      delete nextReasonMap[pageKey];
+      lastImageErrorReasonByPageKey.value = nextReasonMap;
+      return;
+    }
+
+    lastImageErrorReasonByPageKey.value = {
+      ...lastImageErrorReasonByPageKey.value,
+      [pageKey]: reason,
+    };
+  }
+
+  function getPageImageErrorReason(
+    chapterID: string,
+    pageID: string,
+  ): OnlineWorkspaceImageErrorReason | null {
+    return (
+      lastImageErrorReasonByPageKey.value[
+        buildPageImageErrorKey(chapterID, pageID)
+      ] ?? null
+    );
+  }
 
   async function loadRemotePageUnits(
     pageID: string,
@@ -438,6 +489,7 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
     pageRecord: OnlineWorkspacePageRecord,
   ): Promise<OnlineWorkspacePageRecord> {
     if (!pageRecord.image_remote_url) {
+      setPageImageErrorReason(chapterID, pageRecord.id, "missing_remote_url");
       throw new Error(
         `第 ${pageRecord.index} 页缺少图片地址，无法进入在线工作区`,
       );
@@ -448,7 +500,20 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
       pageRecord.image_remote_url;
     const response = await fetch(resolvedImageURL);
     if (!response.ok) {
-      throw new Error(`下载第 ${pageRecord.index} 页图片失败`);
+      setPageImageErrorReason(chapterID, pageRecord.id, "remote_fetch_failed");
+      throw new Error(
+        `下载第 ${pageRecord.index} 页图片失败（HTTP ${response.status}）`,
+      );
+    }
+
+    const contentType = response.headers.get("content-type")?.toLowerCase();
+    if (!contentType?.startsWith("image/")) {
+      setPageImageErrorReason(
+        chapterID,
+        pageRecord.id,
+        "invalid_remote_content",
+      );
+      throw new Error(`第 ${pageRecord.index} 页图源无效`);
     }
 
     const imageBlob = await response.blob();
@@ -457,6 +522,8 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
       imageBlob,
       `chapter-${chapterID}-page-${pageRecord.index}`,
     );
+
+    setPageImageErrorReason(chapterID, pageRecord.id, null);
 
     return {
       ...pageRecord,
@@ -470,6 +537,31 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
     };
   }
 
+  async function invalidatePageImageCache(
+    chapterID: string,
+    pageID: string,
+  ): Promise<OnlineWorkspacePageRecord | null> {
+    const pageRecord = resolveWorkspacePage(chapterID, pageID);
+    if (!pageRecord) {
+      return null;
+    }
+
+    if (isCachedWebAssetSource(pageRecord.image_source)) {
+      await deleteWebProjectImageAssets([pageRecord.image_source.asset_id]);
+    }
+
+    const nextPageRecord: OnlineWorkspacePageRecord = {
+      ...pageRecord,
+      image_source: {
+        kind: "web-remote",
+        name: pageRecord.name,
+        remote_url: pageRecord.image_remote_url ?? "",
+      },
+    };
+
+    return setWorkspacePageRecord(chapterID, nextPageRecord);
+  }
+
   async function ensurePageImageCached(
     chapterID: string,
     pageID: string,
@@ -480,7 +572,21 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
     }
 
     if (isCachedWebAssetSource(pageRecord.image_source)) {
-      return pageRecord;
+      const assetExists = await hasWebProjectImageAsset(
+        pageRecord.image_source.asset_id,
+      );
+
+      if (assetExists) {
+        setPageImageErrorReason(chapterID, pageID, null);
+        return pageRecord;
+      }
+
+      await invalidatePageImageCache(chapterID, pageID);
+    }
+
+    const refreshedPageRecord = resolveWorkspacePage(chapterID, pageID);
+    if (!refreshedPageRecord) {
+      return null;
     }
 
     const jobKey = `${chapterID}:${pageID}`;
@@ -489,7 +595,7 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
       return inflightJob;
     }
 
-    const nextJob = cacheOnlinePage(chapterID, pageRecord)
+    const nextJob = cacheOnlinePage(chapterID, refreshedPageRecord)
       .then((nextPageRecord) => {
         return setWorkspacePageRecord(chapterID, nextPageRecord);
       })
@@ -532,6 +638,42 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
           );
         },
       );
+    }
+  }
+
+  async function prefetchChapterUnits(
+    chapterID: string,
+    pages: OnlineWorkspacePageRecord[],
+  ): Promise<void> {
+    if (pages.length === 0) {
+      return;
+    }
+
+    try {
+      const remoteUnits = await getUnitList({ chapter_id: chapterID });
+      const unitsByPageID = new Map<string, UnitInfo[]>();
+      for (const unitInfo of remoteUnits) {
+        const bucket = unitsByPageID.get(unitInfo.page_id) ?? [];
+        bucket.push(unitInfo);
+        unitsByPageID.set(unitInfo.page_id, bucket);
+      }
+
+      const nextBaseUnits = { ...baseUnitsByPageID.value };
+      const nextWorkingUnits = { ...workingUnitsByPageID.value };
+
+      for (const pageRecord of pages) {
+        const pageUnits = (unitsByPageID.get(pageRecord.id) ?? [])
+          .map((unitInfo) => buildPageLocalUnit(unitInfo, pageRecord))
+          .sort((leftUnit, rightUnit) => leftUnit.index - rightUnit.index);
+        nextBaseUnits[pageRecord.id] = cloneUnits(pageUnits);
+        nextWorkingUnits[pageRecord.id] = cloneUnits(pageUnits);
+      }
+
+      baseUnitsByPageID.value = nextBaseUnits;
+      workingUnitsByPageID.value = nextWorkingUnits;
+      persistWorkspaceState();
+    } catch (error) {
+      console.warn("[online-workspace] 整章 units 预取失败:", chapterID, error);
     }
   }
 
@@ -670,6 +812,7 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
       };
 
       setWorkspaceRecord(workspaceRecord);
+      await prefetchChapterUnits(args.chapter_id, nextPages);
       return workspaceRecord;
     } finally {
       setChapterLoading(args.chapter_id, false);
@@ -700,6 +843,18 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
         ))
     ) {
       return cloneUnits(currentWorkingUnits);
+    }
+
+    if (currentBaseUnits.length > 0 && !hasPendingSave) {
+      if (currentWorkingUnits.length === 0) {
+        workingUnitsByPageID.value = {
+          ...workingUnitsByPageID.value,
+          [pageID]: cloneUnits(currentBaseUnits),
+        };
+      }
+      return cloneUnits(
+        currentWorkingUnits.length > 0 ? currentWorkingUnits : currentBaseUnits,
+      );
     }
 
     const remoteUnits = await loadRemotePageUnits(
@@ -1000,9 +1155,13 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
   return {
     workspaces,
     loadingChapterIDs,
+    lastImageErrorReasonByPageKey,
     ensureChapterWorkspace,
     loadPageUnits,
     ensurePageImageCached,
+    invalidatePageImageCache,
+    getPageImageErrorReason,
+    setPageImageErrorReason,
     schedulePagePrefetch,
     replaceRuntimePageUnits,
     updateLastPageIndex,

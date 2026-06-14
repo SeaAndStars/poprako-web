@@ -22,6 +22,7 @@ import { useAuthStore } from "../stores/auth";
 import { useLocalProjectsStore } from "../stores/localProjects";
 import {
   useOnlineWorkspaceStore,
+  type OnlineWorkspaceImageErrorReason,
   type OnlineWorkspaceRecord,
 } from "../stores/onlineWorkspace";
 import { useSpecialSymbolsStore } from "../stores/specialSymbols";
@@ -126,6 +127,7 @@ export function useTranslatorView() {
     Promise<UserInfo | null>
   >();
   const pendingOnlineAssignmentProfileLoads = new Map<string, Promise<void>>();
+  const loadedOnlineAssignmentChapterIDs = new Set<string>();
 
   function resolveRequestedEditorModeFromRoute(): TranslatorMode {
     const routeMode =
@@ -143,6 +145,8 @@ export function useTranslatorView() {
   const currentPageIndex = ref(0);
   const currentPageImageURL = ref<string | null>(null);
   const imageLoading = ref(false);
+  /** 当前页是否已触发过 img 解码失败后的自动重试。 */
+  const imageErrorRetriedPageKey = ref<string | null>(null);
   const currentPageUnits = ref<LocalProjectUnit[]>([]);
   const selectedUnitID = ref<string | null>(null);
   const editingUnitID = ref<string | null>(null);
@@ -674,6 +678,9 @@ export function useTranslatorView() {
     if (!normalizedChapterID || !authStore.isLoggedIn) {
       return;
     }
+    if (loadedOnlineAssignmentChapterIDs.has(normalizedChapterID)) {
+      return;
+    }
 
     const pendingLoad =
       pendingOnlineAssignmentProfileLoads.get(normalizedChapterID);
@@ -688,6 +695,7 @@ export function useTranslatorView() {
       includes: ["user"],
     })
       .then((assignmentList) => {
+        loadedOnlineAssignmentChapterIDs.add(normalizedChapterID);
         assignmentList.forEach((assignmentInfo) => {
           if (assignmentInfo.user) {
             setRelatedUserProfile(assignmentInfo.user);
@@ -1013,6 +1021,39 @@ export function useTranslatorView() {
     }).length;
   });
 
+  function resolvePageImageErrorMessage(
+    reason: OnlineWorkspaceImageErrorReason | null,
+  ): string {
+    switch (reason) {
+      case "missing_remote_url":
+        return "该页图源尚未上传。";
+      case "remote_fetch_failed":
+      case "invalid_remote_content":
+        return "图源文件不存在或已损坏。";
+      case "cache_resolve_failed":
+        return "图片加载失败，请刷新重试。";
+      default:
+        return "当前页图片加载失败或不存在。";
+    }
+  }
+
+  const currentPageImageErrorMessage = computed(() => {
+    if (
+      !isOnlineWorkspace.value ||
+      !chapterID.value ||
+      !currentPageID.value
+    ) {
+      return "当前页图片加载失败或不存在。";
+    }
+
+    return resolvePageImageErrorMessage(
+      onlineWorkspaceStore.getPageImageErrorReason(
+        chapterID.value,
+        currentPageID.value,
+      ),
+    );
+  });
+
   let currentImageResolveToken = 0;
   let lastCollaborationFallbackAt = 0;
 
@@ -1117,6 +1158,7 @@ export function useTranslatorView() {
       selectedUnitID.value = null;
       editingUnitID.value = null;
       currentPageImageURL.value = null;
+      imageErrorRetriedPageKey.value = null;
       imageLoading.value = true;
       const resolveToken = ++currentImageResolveToken;
 
@@ -1178,6 +1220,30 @@ export function useTranslatorView() {
 
         if (resolveToken !== currentImageResolveToken) {
           return;
+        }
+
+        if (
+          !resolvedURL &&
+          isOnlineWorkspace.value &&
+          chapterID.value &&
+          nextPage.id
+        ) {
+          onlineWorkspaceStore.setPageImageErrorReason(
+            chapterID.value,
+            nextPage.id,
+            "cache_resolve_failed",
+          );
+        } else if (
+          resolvedURL &&
+          isOnlineWorkspace.value &&
+          chapterID.value &&
+          nextPage.id
+        ) {
+          onlineWorkspaceStore.setPageImageErrorReason(
+            chapterID.value,
+            nextPage.id,
+            null,
+          );
         }
 
         currentPageImageURL.value = resolvedURL;
@@ -1550,11 +1616,83 @@ export function useTranslatorView() {
   }
 
   /**
-   * 图片加载失败回调。
+   * 图片加载失败回调；在线工作区会自动失效缓存并重试一次。
    */
-  function handleImageError(): void {
+  async function handleImageError(): Promise<void> {
     imageLoading.value = false;
     currentPageImageURL.value = null;
+
+    if (!isOnlineWorkspace.value || !chapterID.value || !currentPageMeta.value) {
+      return;
+    }
+
+    const pageID = currentPageMeta.value.id;
+    const retryKey = `${chapterID.value}:${pageID}`;
+
+    if (imageErrorRetriedPageKey.value === retryKey) {
+      onlineWorkspaceStore.setPageImageErrorReason(
+        chapterID.value,
+        pageID,
+        "cache_resolve_failed",
+      );
+      message.warning("图片加载失败，请刷新页面或联系图源重新上传。");
+      return;
+    }
+
+    imageErrorRetriedPageKey.value = retryKey;
+    imageLoading.value = true;
+    const resolveToken = ++currentImageResolveToken;
+
+    try {
+      await onlineWorkspaceStore.invalidatePageImageCache(
+        chapterID.value,
+        pageID,
+      );
+      const cachedPage = await onlineWorkspaceStore.ensurePageImageCached(
+        chapterID.value,
+        pageID,
+      );
+
+      if (resolveToken !== currentImageResolveToken || !cachedPage) {
+        return;
+      }
+
+      const resolvedURL = await resolveLocalProjectImageURL(
+        cachedPage.image_source,
+      );
+
+      if (resolveToken !== currentImageResolveToken) {
+        return;
+      }
+
+      if (resolvedURL) {
+        currentPageImageURL.value = resolvedURL;
+        onlineWorkspaceStore.setPageImageErrorReason(
+          chapterID.value,
+          pageID,
+          null,
+        );
+        imageLoading.value = false;
+        return;
+      }
+
+      onlineWorkspaceStore.setPageImageErrorReason(
+        chapterID.value,
+        pageID,
+        "cache_resolve_failed",
+      );
+      imageLoading.value = false;
+      message.warning("图片加载失败，请刷新页面或联系图源重新上传。");
+    } catch (error) {
+      if (resolveToken !== currentImageResolveToken) {
+        return;
+      }
+
+      imageLoading.value = false;
+      message.error(
+        error instanceof Error ? error.message : "页面图片重新加载失败",
+      );
+    }
   }
 
   /**
@@ -2744,6 +2882,7 @@ export function useTranslatorView() {
     handleCompletePageTranslation,
     moveToNextPage,
     currentPageImageURL,
+    currentPageImageErrorMessage,
     clearSelectedUnit,
     pageInboxCount,
     pageOutboxCount,

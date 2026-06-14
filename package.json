@@ -13,7 +13,7 @@
     "dev:staging": "vite --mode staging",
     "dev:production": "vite --mode production",
     "electron:dev": "concurrently -k -n WEB,ELECTRON \"pnpm dev\" \"node electron/wait-and-start.cjs\"",
-    "lint": "eslint \"src/**/*.{ts,vue}\" --max-warnings=0",
+    "lint": "eslint \"src/**/*.{ts,vue}\" --max-warnings=0 --cache --cache-location node_modules/.cache/eslint",
     "type-check": "vue-tsc --noEmit -p tsconfig.app.json",
     "build": "pnpm build:production",
     "build:development": "pnpm lint && pnpm type-check && node scripts/build-with-production-env.mjs development",
@@ -29,24 +29,17 @@
     "electron:verify:shell": "pnpm lint && pnpm type-check",
     "electron:package": "pnpm electron:verify && electron-forge package",
     "electron:package:shell": "pnpm electron:verify:shell && cross-env POPRAKO_ELECTRON_PACKAGE_MODE=shell electron-forge package",
-    "electron:make": "pnpm electron:verify && electron-forge make",
-    "electron:make:win": "pnpm electron:verify && electron-forge make --platform=win32",
+    "electron:make": "node scripts/electron-forge-make.mjs",
+    "electron:make:win": "node scripts/electron-forge-make.mjs --platform=win32",
+    "electron:make:win:fast": "cross-env POPRAKO_SKIP_ELECTRON_VERIFY=1 POPRAKO_ELECTRON_SKIP_MSI=true node scripts/electron-forge-make.mjs --platform=win32",
+    "electron:make:win:full": "cross-env POPRAKO_ELECTRON_PACKAGE_MODE=full pnpm electron:verify && cross-env POPRAKO_ELECTRON_PACKAGE_MODE=full electron-forge make --platform=win32",
+    "electron:make:win:release": "cross-env POPRAKO_ELECTRON_ENABLE_DELTA=true pnpm electron:verify && cross-env POPRAKO_ELECTRON_ENABLE_DELTA=true electron-forge make --platform=win32",
     "electron:make:win:shell": "pnpm electron:verify:shell && cross-env POPRAKO_ELECTRON_PACKAGE_MODE=shell electron-forge make --platform=win32",
     "electron:make:mac": "pnpm electron:verify && electron-forge make --platform=darwin",
     "electron:make:linux": "pnpm electron:verify && electron-forge make --platform=linux",
     "electron:publish": "pnpm electron:verify && electron-forge publish"
   },
-  "dependencies": {
-    "@ant-design/icons-vue": "^7.0.1",
-    "@microsoft/signalr": "^10.0.0",
-    "ant-design-vue": "^4.2.6",
-    "axios": "^1.8.4",
-    "cropperjs": "^1.6.2",
-    "electron-squirrel-startup": "^1.0.1",
-    "pinia": "^3.0.3",
-    "vue": "^3.5.13",
-    "vue-router": "^4.5.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@electron-forge/cli": "^7.11.1",
     "@electron-forge/maker-deb": "^7.11.1",
@@ -70,5 +63,6 @@
     "vue-eslint-parser": "^9.4.3",
     "vue-tsc": "^2.2.8",
     "wait-on": "^9.0.4"
-  }
+  },
+  "optionalDependencies": {}
 }

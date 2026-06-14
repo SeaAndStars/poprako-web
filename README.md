@@ -59,7 +59,7 @@ pnpm build:production
 
 - `lpn.seastarss.cn` 是前端站点。
 - 前端与后端 API 一起部署时，前端直接访问同域 `/api/v1`。
-- 开发态和本地 preview 如需转发到独立后端，可在对应模式文件里配置 `VITE_API_PROXY_TARGET=http://127.0.0.1:5485`。
+- 开发态和本地 preview 如需转发到独立后端，可在对应模式文件里配置 `VITE_API_PROXY_TARGET=http://127.0.0.1:18880`。
 - SignalR 也走同域 `/hubs/translator-collaboration`，因此线上 Nginx 需要同时代理 `/api/` 和 `/hubs/`。
 
 Vite 环境优先级仍然遵循 mode 规则，示例以 production 为例：
@@ -179,7 +179,11 @@ POPRAKO_DESKTOP_UPDATE_INTERVAL_MINUTES=60
 说明：
 
 - `POPRAKO_DESKTOP_UPDATE_BASE_URL` 指向包含 `RELEASES` 的最终目录，而不是站点根目录。
-- `POPRAKO_DESKTOP_REMOTE_RELEASES_URL` 用于打包时生成 delta 包；如果不填，将回退到 `POPRAKO_DESKTOP_UPDATE_BASE_URL`。
+- `POPRAKO_DESKTOP_REMOTE_RELEASES_URL` 用于**发布构建**时生成 delta 包；本地 `electron:make:win` 默认不拉取历史包。发布到 CDN 前请用 `pnpm electron:make:win:release`（等价于设置 `POPRAKO_ELECTRON_ENABLE_DELTA=true`）。
+- 配置了 `POPRAKO_RENDERER_REMOTE_URL` 时，`pnpm electron:make:win` 自动走 shell 打包（仅 lint/type-check，不跑桌面 vite 全量构建）。
+- 需要完整内置 `dist/` 的安装包：`pnpm electron:make:win:full`。
+- 迭代打包跳过门禁：`pnpm electron:make:win:fast`（shell 白名单复制；产物在 `out-shell/build-<时间戳>/make/`）。
+- 仅加快 Windows 安装器生成（跳过 MSI）：`cross-env POPRAKO_ELECTRON_SKIP_MSI=true pnpm electron:make:win:fast`。
 - 首次安装后的第一次启动会因 Squirrel 文件锁自动延后首次检查，避免 `--squirrel-firstrun` 阶段报错。
 - 从“完整渲染层内置包”首次切换到“远程 Web 壳包”时，生成的首个 delta 仍可能较大；完成这次迁移后，后续只改 Web 业务页面时通常不需要重新发布桌面包。
 - 若未开启 `POPRAKO_DESKTOP_AUTO_UPDATE` 或未配置更新源，客户端会跳过自动更新初始化，但不影响正常启动。

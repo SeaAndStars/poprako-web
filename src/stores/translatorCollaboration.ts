@@ -100,7 +100,7 @@ function resolveHubURL(): string {
 
   if (!configuredBaseURL) {
     if (window.location.protocol === "file:") {
-      return "http://127.0.0.1:18881/hubs/translator-collaboration";
+      return "http://127.0.0.1:18880/hubs/translator-collaboration";
     }
 
     return `${window.location.origin}/hubs/translator-collaboration`;

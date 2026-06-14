@@ -8,8 +8,10 @@ import type { UnitInfo } from "../../types/domain";
  * 获取 unit 列表查询参数，对应 GET /units。
  */
 export interface UnitListQuery {
-  /** 页面 ID。 */
-  page_id: string;
+  /** 页面 ID（与 chapter_id 二选一）。 */
+  page_id?: string;
+  /** 章节 ID（一次拉取整章 units）。 */
+  chapter_id?: string;
   /** 可选分页偏移量。 */
   offset?: number;
   /** 可选分页大小，后端当前最大支持 500。 */

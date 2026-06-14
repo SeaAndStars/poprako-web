@@ -188,6 +188,33 @@ export async function storeWebProjectImageAssetBlob(
 }
 
 /**
+ * 检查 asset_id 对应的图片是否仍存在于 IndexedDB。
+ */
+export async function hasWebProjectImageAsset(assetID: string): Promise<boolean> {
+  const database = await openLocalProjectAssetDatabase();
+
+  const exists = await new Promise<boolean>((resolve, reject) => {
+    const transaction = database.transaction(
+      LOCAL_PROJECT_ASSET_STORE_NAME,
+      "readonly",
+    );
+    const store = transaction.objectStore(LOCAL_PROJECT_ASSET_STORE_NAME);
+    const request = store.getKey(assetID);
+
+    request.onerror = () => {
+      reject(request.error ?? new Error("检查本地项目图片失败"));
+    };
+
+    request.onsuccess = () => {
+      resolve(request.result !== undefined);
+    };
+  });
+
+  database.close();
+  return exists;
+}
+
+/**
  * 根据 asset_id 读取 web 端持久化图片。
  */
 export async function loadWebProjectImageAsset(

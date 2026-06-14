@@ -509,7 +509,7 @@
 
         <div v-else class="translator-stage__empty">
           <span v-if="imageLoading">图片加载中…</span>
-          <span v-else>当前页图片加载失败或不存在。</span>
+          <span v-else>{{ currentPageImageErrorMessage }}</span>
         </div>
       </section>
 
@@ -970,6 +970,7 @@ const {
   handleCompletePageTranslation,
   moveToNextPage,
   currentPageImageURL,
+  currentPageImageErrorMessage,
   clearSelectedUnit,
   pageInboxCount,
   pageOutboxCount,

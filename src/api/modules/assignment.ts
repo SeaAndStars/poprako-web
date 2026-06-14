@@ -9,8 +9,10 @@ import type { AssignmentInfo } from "../../types/domain";
  * 分配列表查询参数，对应 GET /assignments。
  */
 export interface AssignmentListQuery extends PaginationQuery, IncludeQuery {
-  /** 所属章节 ID。 */
-  chapter_id: string;
+  /** 所属章节 ID（单章查询）。 */
+  chapter_id?: string;
+  /** 批量章节 ID（与 chapter_id 二选一）。 */
+  chapter_ids?: string[];
 }
 
 /**
