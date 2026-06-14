@@ -657,7 +657,7 @@ async function openPage(
   };
 
   const activeSessionProfile = sessionProfile.value;
-  if (activeSessionProfile) {
+  if (activeSessionProfile && !isConnected.value) {
     const nextPresenceEditor = buildSessionPageEditor({
       sessionProfile: activeSessionProfile,
       pageKey: args.page_key,
@@ -733,7 +733,7 @@ async function tryAcquirePageLock(mode: TranslatorMode): Promise<boolean> {
   activeMode.value = mode;
   const activeSessionProfile = sessionProfile.value;
 
-  if (result.acquired && activeSessionProfile) {
+  if (result.acquired && activeSessionProfile && !isConnected.value) {
     const nextLockHolder = normalizeEditor(
       result.editor ??
         buildSessionPageEditor({
@@ -752,7 +752,7 @@ async function tryAcquirePageLock(mode: TranslatorMode): Promise<boolean> {
       [nextLockHolder],
       activeProjectKey.value,
     );
-  } else if (result.editor) {
+  } else if (result.editor && !isConnected.value) {
     projectState.value = replacePageLockHolder(
       projectState.value,
       activePageKey.value,
@@ -791,7 +791,8 @@ async function updateActiveMode(mode: TranslatorMode): Promise<void> {
   });
 
   const activeSessionProfile = sessionProfile.value;
-  if (currentPageEditor.value && activeSessionProfile) {
+
+  if (currentPageEditor.value && activeSessionProfile && !isConnected.value) {
     const nextLockHolder = buildSessionPageEditor({
       sessionProfile: activeSessionProfile,
       pageKey: activePageKey.value,
@@ -854,9 +855,10 @@ async function releaseCurrentPageLock(): Promise<void> {
 
   await activeConnection.invoke("ReleaseCurrentPageLock", {
     project_key: activeProjectKey.value,
+    page_key: activePageKey.value,
   });
 
-  if (activeSessionProfile && viewingEditor) {
+  if (activeSessionProfile && viewingEditor && !isConnected.value) {
     projectState.value = replaceSessionProjectEditors(
       projectState.value,
       activeSessionProfile.user_id,

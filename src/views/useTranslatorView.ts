@@ -1201,7 +1201,7 @@ export function useTranslatorView() {
         }
 
         void ensureCurrentPageOwnerProfilesLoaded(nextUnits);
-        void syncCurrentPageCollaborationSession();
+        await syncCurrentPageCollaborationSession();
 
         let resolvedURL: string | null = null;
 
@@ -1484,7 +1484,10 @@ export function useTranslatorView() {
         units: currentPageUnits.value,
       });
 
-      if (remoteSnapshot) {
+      if (
+        remoteSnapshot &&
+        remoteSnapshot.updated_by_user_id !== currentUserProfile.value.id
+      ) {
         applyIncomingPageSnapshot(remoteSnapshot);
       }
     } catch (error) {
