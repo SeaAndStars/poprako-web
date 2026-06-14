@@ -11,6 +11,27 @@
 - HTTP 客户端：`src/api/http.ts`
 - API 模块聚合：`src/api/modules/index.ts`
 
+## 1.1 状态管理（Pinia）
+
+跨页面/跨组件共享状态统一使用 Pinia Store，入口：[`src/stores/index.ts`](src/stores/index.ts)。
+
+| Store | 职责 |
+|-------|------|
+| `auth` | 登录令牌、用户资料、当前团队 |
+| `theme` | 主题模式与界面密度 |
+| `assetCache` | 资源 URL 跨页缓存 |
+| `dashboard` | 工作台列表与下载弹窗 |
+| `memberManagement` | 成员/团队/邀请管理 |
+| `worksetDetail` | 工作集详情看板 |
+| `superAdmin` | 超管后台 |
+| `translatorUI` | 翻译器 UI 会话态 |
+| `localProjects` / `onlineWorkspace` / `translatorCollaboration` / `translatorSettings` / `specialSymbols` | 翻译业务域 |
+
+约定：
+- 视图用 `storeToRefs(store)` 读响应式状态，actions 直接解构调用
+- 需要持久化的 Store 继续在内部读写 `localStorage`
+- 路由离开时可对纯 UI Store 调用 `$reset()` 或 `resetSession()`
+
 ## 2. 本地开发
 
 ```bash

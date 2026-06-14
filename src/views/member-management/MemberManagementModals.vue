@@ -204,9 +204,12 @@
 </template>
 
 <script setup lang="ts">
+import { storeToRefs } from "pinia";
 import MemberInvitationsCard from "./MemberInvitationsCard.vue";
 import MemberManagementSidebar from "./MemberManagementSidebar.vue";
-import { useMemberManagementContext } from "./useMemberManagement";
+import { useMemberManagementStore } from "../../stores/memberManagement";
+
+const memberManagementStore = useMemberManagementStore();
 
 const {
   isInvitationCenterModalOpen,
@@ -231,6 +234,9 @@ const {
   joinTeamForm,
   roleCheckboxOptions,
   selectedTeamInfo,
+} = storeToRefs(memberManagementStore);
+
+const {
   handleInvitationCenterModalCancel,
   handleTeamSettingsModalCancel,
   handleTeamCreateModalSubmit,
@@ -243,5 +249,5 @@ const {
   handleMemberModalCancel,
   handleTeamDeleteModalSubmit,
   handleTeamDeleteModalCancel,
-} = useMemberManagementContext();
+} = memberManagementStore;
 </script>

@@ -46,20 +46,21 @@
  * 根组件负责挂载全局主题 Provider 与路由承载容器。
  */
 import { computed } from "vue";
+import { storeToRefs } from "pinia";
 import { useRoute } from "vue-router";
 import { onBeforeUnmount, onMounted } from "vue";
 import DesktopSidebar from "./components/DesktopSidebar.vue";
 import DesktopTitleBar from "./components/DesktopTitleBar.vue";
-import { useThemeProvider } from "./theme/provider";
+import { useThemeStore } from "./stores/theme";
 
+const themeStore = useThemeStore();
 const {
   themeMode,
   themeDensity,
   antdThemeConfig,
   antdComponentSize,
-  setThemeMode,
-  setThemeDensity,
-} = useThemeProvider();
+} = storeToRefs(themeStore);
+const { setThemeMode, setThemeDensity } = themeStore;
 const route = useRoute();
 const desktopCapabilities = window.poprakoDesktop?.capabilities;
 const isDesktopEnvironment = computed(() =>

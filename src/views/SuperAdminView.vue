@@ -521,7 +521,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
+import { storeToRefs } from "pinia";
 import {
   ControlOutlined,
   LinkOutlined,
@@ -537,10 +538,13 @@ import type {
   TeamInfo,
   UserInfo,
 } from "../types/domain";
-import { useSuperAdminView } from "./super-admin/useSuperAdminView";
+import { useAuthStore } from "../stores/auth";
+import { useSuperAdminStore } from "../stores/superAdmin";
+
+const superAdminStore = useSuperAdminStore();
+const { currentUserProfile: currentUser } = storeToRefs(useAuthStore());
 
 const {
-  currentUser,
   pageLoading,
   teamsLoading,
   usersLoading,
@@ -571,6 +575,9 @@ const {
   selectedTeamPendingInvitationCount,
   selectedTeamAdminCount,
   roleCheckboxOptions,
+} = storeToRefs(superAdminStore);
+
+const {
   formatTimestamp,
   resolveDisplayInitial,
   resolveRoleEntries,
@@ -595,7 +602,11 @@ const {
   canDeleteUser,
   handleDeleteUser,
   handleCopyInvitationCode,
-} = useSuperAdminView();
+} = superAdminStore;
+
+onMounted(() => {
+  void superAdminStore.initializeSuperAdminView();
+});
 
 const teamColumns: TableColumnsType<TeamInfo> = [
   {

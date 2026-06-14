@@ -229,7 +229,7 @@ import {
   TeamOutlined,
 } from "@ant-design/icons-vue";
 import { useAuthStore } from "../stores/auth";
-import type { ThemeDensity, ThemeMode } from "../theme/provider";
+import type { ThemeDensity, ThemeMode } from "../stores/theme";
 
 type SubPanelKey = "theme" | "help";
 

@@ -139,21 +139,27 @@ import {
   PlusOutlined,
 } from "@ant-design/icons-vue";
 import type { TableColumnsType } from "ant-design-vue";
+import { storeToRefs } from "pinia";
 import type { InvitationInfo } from "../../types/domain";
-import { useMemberManagementContext } from "./useMemberManagement";
+import { useMemberManagementStore } from "../../stores/memberManagement";
+
+const memberManagementStore = useMemberManagementStore();
 
 const {
   invitations,
   detailLoading,
   hasSelectedTeam,
   pendingInvitationCount,
+} = storeToRefs(memberManagementStore);
+
+const {
   formatTimestamp,
   resolveRoleEntries,
   handleCopyInvitationCode,
   openInvitationCreateModal,
   openInvitationEditModal,
   handleDeleteInvitation,
-} = useMemberManagementContext();
+} = memberManagementStore;
 
 const invitationColumns: TableColumnsType<InvitationInfo> = [
   {

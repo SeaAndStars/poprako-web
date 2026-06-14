@@ -317,23 +317,23 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from "vue";
+import { storeToRefs } from "pinia";
 import LocalProjectCard from "../components/local-project/LocalProjectCard.vue";
 import LocalProjectCreateModal from "../components/local-project/LocalProjectCreateModal.vue";
-import { useDashboardView } from "./useDashboardView";
+import {
+  formatParticipationTimestamp,
+  isWorkspaceEnterRole,
+  useDashboardStore,
+} from "../stores/dashboard";
+
+const dashboardStore = useDashboardStore();
 
 const {
   activeProject,
   createModalOpen,
   filteredOnlineParticipations,
   filteredProjects,
-  formatParticipationTimestamp,
-  handleDeleteProject,
-  handleDownloadChapterManuscript,
-  handleOpenOnlineChapter,
-  handleOpenProject,
-  handleProjectCreated,
-  isWorkspaceEnterRole,
-  loadMyOnlineAssignments,
   localProjectEmptyText,
   onlineAssignmentsErrorMessage,
   onlineAssignmentsLoading,
@@ -346,12 +346,25 @@ const {
   downloadModalRangeInput,
   downloadModalRangeError,
   downloadModalIncludeImages,
-  confirmDownloadModal,
-  cancelDownloadModal,
   projects,
   searchKeyword,
   summaryCards,
   toolbarHint,
-} = useDashboardView();
+} = storeToRefs(dashboardStore);
+
+const {
+  cancelDownloadModal,
+  confirmDownloadModal,
+  handleDeleteProject,
+  handleDownloadChapterManuscript,
+  handleOpenOnlineChapter,
+  handleOpenProject,
+  handleProjectCreated,
+  loadMyOnlineAssignments,
+} = dashboardStore;
+
+onMounted(() => {
+  void loadMyOnlineAssignments();
+});
 </script>
 <style src="./dashboardView.scss" lang="scss"></style>

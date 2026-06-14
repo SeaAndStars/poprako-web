@@ -848,7 +848,9 @@
 </template>
 
 <script setup lang="ts">
-import { h } from "vue";
+import { h, onMounted, watch } from "vue";
+import { useRoute } from "vue-router";
+import { storeToRefs } from "pinia";
 import {
   AuditOutlined,
   ArrowLeftOutlined,
@@ -861,19 +863,30 @@ import ChapterCreateModal from "./ChapterCreateModal.vue";
 import RoleStatusItem from "./RoleStatusItem.vue";
 import WorksetEditModal from "./WorksetEditModal.vue";
 import { resolveWorksetStatusColor } from "./worksetStatus";
-import { useWorksetDetailView } from "./useWorksetDetailView";
+import {
+  ROLE_PROOFREADER,
+  ROLE_REVIEWER,
+  ROLE_TRANSLATOR,
+  ROLE_TYPESETTER,
+  displaySequence,
+  formatTimestamp,
+  resolveRoleLabel,
+  resolveUserDisplayName,
+  resolveWorkflowStageLabel,
+  resolveWorkflowTagColor,
+  useWorksetDetailStore,
+} from "../../stores/worksetDetail";
+
+const route = useRoute();
+const worksetDetailStore = useWorksetDetailStore();
 
 const {
   batchApplyingChapterId,
   board,
   canCreateChapter,
-  canBatchApplyRoles,
   canDeleteChapter,
   canSubmitRoleManagement,
   chapterDefaultRoleSummaries,
-  clearManagedRoleSelection,
-  closeChapterEditor,
-  closeRoleManager,
   comicOptions,
   currentEditableChapter,
   currentManagedRoleChapter,
@@ -886,21 +899,8 @@ const {
   currentTeamMember,
   currentProjectTitle,
   currentReviewChapter,
-  displaySequence,
   editingChapterNumber,
   editingChapterSubtitle,
-  formatTimestamp,
-  handleBack,
-  handleBatchApplyRoles,
-  handleChapterCreated,
-  handleComicChange,
-  handleDeleteChapter,
-  handleRoleWorkspace,
-  handleReviewDrawerClose,
-  handleWorksetUpdated,
-  handleRoleChanged,
-  handleRoleRequestReview,
-  handleRoleReview,
   headerSubtitle,
   internalProgressSummary,
   latestChapterSummary,
@@ -912,39 +912,65 @@ const {
   managingRoleUserId,
   roleManagerOkText,
   nextChapterNumber,
-  openChapterEditor,
-  openManagedRoleReview,
-  openRoleManager,
-  refreshBoard,
-  removeManagedTranslator,
-  removingManagedRoleUserId,
-  resolveBatchApplyLabel,
-  resolveRoleLabel,
-  resolveUserAvatarUrl,
-  resolveUserDisplayName,
-  resolveWorkflowStageLabel,
-  resolveWorkflowTagColor,
   reviewRequests,
   reviewDrawerOpen,
   reviewRequestsLoading,
   reviewSubmittingId,
-  ROLE_PROOFREADER,
-  ROLE_REVIEWER,
-  ROLE_TRANSLATOR,
-  ROLE_TYPESETTER,
   selectedComic,
   selectedComicStats,
   showChapterModal,
   showWorksetEditModal,
-  submitChapterUpdate,
-  submitRoleManagement,
   summaryCards,
   deletingChapterId,
   updatingChapter,
   usedChapterNumbers,
   worksetCoverUrl,
   worksetExternalStatusText,
-} = useWorksetDetailView();
+  removingManagedRoleUserId,
+} = storeToRefs(worksetDetailStore);
+
+const {
+  canBatchApplyRoles,
+  clearManagedRoleSelection,
+  closeChapterEditor,
+  closeRoleManager,
+  handleBack,
+  handleBatchApplyRoles,
+  handleChapterCreated,
+  handleComicChange,
+  handleDeleteChapter,
+  handleRoleWorkspace,
+  handleReviewDrawerClose,
+  handleWorksetUpdated,
+  handleRoleChanged,
+  handleRoleRequestReview,
+  handleRoleReview,
+  initializeFromRoute,
+  openChapterEditor,
+  openManagedRoleReview,
+  openRoleManager,
+  refreshBoard,
+  removeManagedTranslator,
+  resolveBatchApplyLabel,
+  resolveUserAvatarUrl,
+  submitChapterUpdate,
+  submitRoleManagement,
+} = worksetDetailStore;
+
+/** 从当前路由同步工作集 ID 与漫画 ID 到 Store。 */
+function syncRouteContext(): void {
+  initializeFromRoute(
+    String(route.params.id || ""),
+    typeof route.query.comicId === "string" ? route.query.comicId : undefined,
+  );
+}
+
+onMounted(syncRouteContext);
+
+watch(
+  () => [route.params.id, route.query.comicId] as const,
+  syncRouteContext,
+);
 </script>
 
 <style lang="scss" src="./worksetDetailView.scss"></style>

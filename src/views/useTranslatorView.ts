@@ -26,12 +26,18 @@ import {
   type OnlineWorkspaceRecord,
 } from "../stores/onlineWorkspace";
 import { useSpecialSymbolsStore } from "../stores/specialSymbols";
+import { useAssetCacheStore } from "../stores/assetCache";
+import { useThemeStore } from "../stores/theme";
 import {
   TRANSLATOR_SHORTCUT_ACTION_DEFINITIONS,
   formatShortcutBindingForDisplay,
   type TranslatorShortcutActionId,
   useTranslatorSettingsStore,
 } from "../stores/translatorSettings";
+import {
+  useTranslatorUIStore,
+  type EditableFieldKey,
+} from "../stores/translatorUI";
 import {
   useTranslatorCollaborationStore,
   type TranslatorCollaboratorIdentity,
@@ -44,7 +50,6 @@ import {
   nextTick,
   onBeforeUnmount,
   onMounted,
-  ref,
   watch,
 } from "vue";
 import { Modal, message } from "ant-design-vue";
@@ -59,18 +64,11 @@ import {
 import {
   appendCacheBustQueryToSharedAssetUrl,
   appendCacheBustQueryToUrl,
-  resolveAssetUrl,
-  resolveInMemoryAssetUrl,
 } from "../api/objectStorage";
 
 export const USER_PROFILE_UPDATED_EVENT = "poprako:user-profile-updated";
 
-type EditableFieldKey = "translated_text" | "proofread_text";
 type UnitOwnerRole = "translate" | "proofread";
-
-interface SyncCurrentUserProfileOptions {
-  clearDisplayAssetCache?: boolean;
-}
 
 interface ShortcutHelpItem {
   keys: string;
@@ -89,12 +87,47 @@ export function useTranslatorView() {
   const localProjectsStore = useLocalProjectsStore();
   const onlineWorkspaceStore = useOnlineWorkspaceStore();
   const specialSymbolsStore = useSpecialSymbolsStore();
+  const assetCacheStore = useAssetCacheStore();
+  const themeStore = useThemeStore();
   const translatorSettingsStore = useTranslatorSettingsStore();
+  const translatorUIStore = useTranslatorUIStore();
   const translatorCollaborationStore = useTranslatorCollaborationStore();
   const { projects } = storeToRefs(localProjectsStore);
   const { workspaces: onlineWorkspaces, loadingChapterIDs } =
     storeToRefs(onlineWorkspaceStore);
+  const { isDarkMode: isDarkTheme } = storeToRefs(themeStore);
   const { customSymbols } = storeToRefs(specialSymbolsStore);
+  const {
+    stageOverlayRef,
+    currentUserProfile,
+    currentUserAvatarCacheBustToken,
+    relatedUserProfiles,
+    relatedCollaboratorIdentities,
+    editorMode,
+    activeTextField,
+    currentPageIndex,
+    currentPageImageURL,
+    imageLoading,
+    imageErrorRetriedPageKey,
+    currentPageUnits,
+    selectedUnitID,
+    editingUnitID,
+    isAcquiringPageLock,
+    isCompletingCurrentPageTranslation,
+    stageScale,
+    stagePanX,
+    stagePanY,
+    isDragging,
+    stageDragLastX,
+    stageDragLastY,
+    stageDragMoved,
+    draggingUnitID,
+    markerDragStartX,
+    markerDragStartY,
+    markerDragOrigX,
+    markerDragOrigY,
+    markerDragMoved,
+  } = storeToRefs(translatorUIStore);
   const {
     projectState,
     currentPageEditor,
@@ -105,22 +138,6 @@ export function useTranslatorView() {
     pageEditorsByPageKey,
     pageSnapshots,
   } = storeToRefs(translatorCollaborationStore);
-
-  const stageOverlayRef = ref<HTMLElement | null>(null);
-  const isDarkTheme = ref(document.documentElement.dataset.theme === "dark");
-  const currentUserProfile = ref<UserInfo | null>(null);
-  const currentUserAvatarCacheBustToken = ref<number>(0);
-  const displayAssetUrlCache = ref<Record<string, string>>({});
-  const missingDisplayAssetUrlCache = ref<Record<string, true>>({});
-  const pendingDisplayAssetLoads = new Map<
-    string,
-    Promise<string | undefined>
-  >();
-  let themeObserver: MutationObserver | null = null;
-  const relatedUserProfiles = ref<Record<string, UserInfo>>({});
-  const relatedCollaboratorIdentities = ref<
-    Record<string, TranslatorCollaboratorIdentity>
-  >({});
   const pendingRelatedUserProfileLoads = new Map<
     string,
     Promise<UserInfo | null>
@@ -138,36 +155,7 @@ export function useTranslatorView() {
 
     return routeMode === "proofread" ? "proofread" : "translate";
   }
-
-  const editorMode = ref<TranslatorMode>(resolveRequestedEditorModeFromRoute());
-  const activeTextField = ref<EditableFieldKey>("translated_text");
-  const currentPageIndex = ref(0);
-  const currentPageImageURL = ref<string | null>(null);
-  const imageLoading = ref(false);
-  /** 当前页是否已触发过 img 解码失败后的自动重试。 */
-  const imageErrorRetriedPageKey = ref<string | null>(null);
-  const currentPageUnits = ref<LocalProjectUnit[]>([]);
-  const selectedUnitID = ref<string | null>(null);
-  const editingUnitID = ref<string | null>(null);
-  const isAcquiringPageLock = ref(false);
-  const isCompletingCurrentPageTranslation = ref(false);
-
-  /* ── 图片缩放 & 平移状态 ── */
-  const stageScale = ref(1);
-  const stagePanX = ref(0);
-  const stagePanY = ref(0);
-  const isDragging = ref(false);
-  let dragLastX = 0;
-  let dragLastY = 0;
-  let stageDragMoved = false;
-
-  /* ── 标记拖拽状态 ── */
-  const draggingUnitID = ref<string | null>(null);
-  let markerDragStartX = 0;
-  let markerDragStartY = 0;
-  let markerDragOrigX = 0;
-  let markerDragOrigY = 0;
-  let markerDragMoved = false;
+  editorMode.value = resolveRequestedEditorModeFromRoute();
 
   const stageTransformStyle = computed(() => ({
     transform: `translate(${stagePanX.value}px, ${stagePanY.value}px) scale(${stageScale.value})`,
@@ -319,55 +307,10 @@ export function useTranslatorView() {
     );
   });
 
-  function resolveDisplayAssetUrl(
-    rawUrl: string | undefined,
-  ): string | undefined {
-    const normalizedUrl = resolveAssetUrl(rawUrl);
-
-    if (!normalizedUrl) {
-      return undefined;
-    }
-
-    const cachedDisplayUrl = displayAssetUrlCache.value[normalizedUrl];
-    if (cachedDisplayUrl) {
-      return cachedDisplayUrl;
-    }
-
-    if (missingDisplayAssetUrlCache.value[normalizedUrl]) {
-      return undefined;
-    }
-
-    if (!pendingDisplayAssetLoads.has(normalizedUrl)) {
-      const nextLoadPromise = resolveInMemoryAssetUrl(normalizedUrl)
-        .then((resolvedDisplayUrl) => {
-          if (resolvedDisplayUrl) {
-            displayAssetUrlCache.value = {
-              ...displayAssetUrlCache.value,
-              [normalizedUrl]: resolvedDisplayUrl,
-            };
-          } else {
-            missingDisplayAssetUrlCache.value = {
-              ...missingDisplayAssetUrlCache.value,
-              [normalizedUrl]: true,
-            };
-          }
-
-          return resolvedDisplayUrl;
-        })
-        .finally(() => {
-          pendingDisplayAssetLoads.delete(normalizedUrl);
-        });
-
-      pendingDisplayAssetLoads.set(normalizedUrl, nextLoadPromise);
-    }
-
-    return undefined;
-  }
-
-  function clearDisplayAssetUrlCaches(): void {
-    displayAssetUrlCache.value = {};
-    missingDisplayAssetUrlCache.value = {};
-    pendingDisplayAssetLoads.clear();
+  function resolveDisplayAssetUrl(rawUrl: string | undefined): string | undefined {
+    return assetCacheStore.resolveDisplayAssetUrl(rawUrl, {
+      fallbackToRawUrl: false,
+    });
   }
 
   const currentUserAvatarRawURL = computed(() => {
@@ -1055,6 +998,15 @@ export function useTranslatorView() {
 
   let currentImageResolveToken = 0;
   let lastCollaborationFallbackAt = 0;
+
+  watch(
+    () => `${route.name ?? ""}:${projectID.value}:${chapterID.value}`,
+    () => {
+      translatorUIStore.resetSession();
+      editorMode.value = resolveRequestedEditorModeFromRoute();
+    },
+    { immediate: true },
+  );
 
   watch(
     () => ({
@@ -1986,7 +1938,7 @@ export function useTranslatorView() {
   }
 
   function handleOverlayClick(event: MouseEvent): void {
-    if (stageDragMoved || markerDragMoved) return;
+    if (stageDragMoved.value || markerDragMoved.value) return;
 
     if (selectedUnitID.value) {
       clearSelectedUnit();
@@ -1996,7 +1948,7 @@ export function useTranslatorView() {
   }
 
   function handleOverlayContextMenu(event: MouseEvent): void {
-    if (stageDragMoved || markerDragMoved) return;
+    if (stageDragMoved.value || markerDragMoved.value) return;
 
     if (selectedUnitID.value) {
       clearSelectedUnit();
@@ -2474,9 +2426,9 @@ export function useTranslatorView() {
     if (event.button !== 0) return;
     event.preventDefault();
     isDragging.value = true;
-    stageDragMoved = false;
-    dragLastX = event.clientX;
-    dragLastY = event.clientY;
+    stageDragMoved.value = false;
+    stageDragLastX.value = event.clientX;
+    stageDragLastY.value = event.clientY;
   }
 
   function handleStageDragMove(event: MouseEvent): void {
@@ -2485,15 +2437,15 @@ export function useTranslatorView() {
       return;
     }
     if (!isDragging.value) return;
-    const dx = event.clientX - dragLastX;
-    const dy = event.clientY - dragLastY;
+    const dx = event.clientX - stageDragLastX.value;
+    const dy = event.clientY - stageDragLastY.value;
     if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-      stageDragMoved = true;
+      stageDragMoved.value = true;
     }
     stagePanX.value += dx;
     stagePanY.value += dy;
-    dragLastX = event.clientX;
-    dragLastY = event.clientY;
+    stageDragLastX.value = event.clientX;
+    stageDragLastY.value = event.clientY;
   }
 
   function handleStageDragEnd(event?: MouseEvent): void {
@@ -2504,9 +2456,9 @@ export function useTranslatorView() {
     isDragging.value = false;
     /* stageDragMoved 延迟重置——click 事件在 mouseup 之后触发，
        如果立即清零，overlay click 会误判为未拖拽而创建标记。 */
-    if (stageDragMoved) {
+    if (stageDragMoved.value) {
       requestAnimationFrame(() => {
-        stageDragMoved = false;
+        stageDragMoved.value = false;
       });
     }
   }
@@ -2552,11 +2504,11 @@ export function useTranslatorView() {
       }
 
       draggingUnitID.value = unitID;
-      markerDragStartX = event.clientX;
-      markerDragStartY = event.clientY;
-      markerDragOrigX = unit.x_coord;
-      markerDragOrigY = unit.y_coord;
-      markerDragMoved = false;
+      markerDragStartX.value = event.clientX;
+      markerDragStartY.value = event.clientY;
+      markerDragOrigX.value = unit.x_coord;
+      markerDragOrigY.value = unit.y_coord;
+      markerDragMoved.value = false;
       event.preventDefault();
     })();
   }
@@ -2566,14 +2518,14 @@ export function useTranslatorView() {
     const overlayEl = stageOverlayRef.value;
     if (!overlayEl) return;
 
-    const dx = event.clientX - markerDragStartX;
-    const dy = event.clientY - markerDragStartY;
-    if (!markerDragMoved && Math.abs(dx) + Math.abs(dy) < 4) return;
-    markerDragMoved = true;
+    const dx = event.clientX - markerDragStartX.value;
+    const dy = event.clientY - markerDragStartY.value;
+    if (!markerDragMoved.value && Math.abs(dx) + Math.abs(dy) < 4) return;
+    markerDragMoved.value = true;
 
     const overlayRect = overlayEl.getBoundingClientRect();
-    const nextX = markerDragOrigX + dx / overlayRect.width;
-    const nextY = markerDragOrigY + dy / overlayRect.height;
+    const nextX = markerDragOrigX.value + dx / overlayRect.width;
+    const nextY = markerDragOrigY.value + dy / overlayRect.height;
 
     const nextUnits = currentPageUnits.value.map((u) => {
       if (u.id !== draggingUnitID.value) return u;
@@ -2588,13 +2540,13 @@ export function useTranslatorView() {
   function handleMarkerDragEnd(event?: MouseEvent): void {
     if (!draggingUnitID.value) return;
     const unitID = draggingUnitID.value;
-    const didMove = markerDragMoved;
+    const didMove = markerDragMoved.value;
     draggingUnitID.value = null;
     /* markerDragMoved 延迟重置——同 stageDragMoved，
        避免 mouseup 之后的 click 事件误创建标记。 */
-    if (markerDragMoved) {
+    if (markerDragMoved.value) {
       requestAnimationFrame(() => {
-        markerDragMoved = false;
+        markerDragMoved.value = false;
       });
     }
     if (event) {
@@ -2630,16 +2582,7 @@ export function useTranslatorView() {
     // 保留事件监听接口以备后续扩展
   }
 
-  function syncDarkThemeState(): void {
-    isDarkTheme.value = document.documentElement.dataset.theme === "dark";
-  }
-
-  async function syncCurrentUserProfile(
-    options?: SyncCurrentUserProfileOptions,
-  ): Promise<void> {
-    if (options?.clearDisplayAssetCache) {
-      clearDisplayAssetUrlCaches();
-    }
+  async function syncCurrentUserProfile(): Promise<void> {
 
     if (!authStore.isLoggedIn) {
       currentUserAvatarCacheBustToken.value = 0;
@@ -2669,9 +2612,8 @@ export function useTranslatorView() {
 
   function handleUserProfileUpdated(): void {
     currentUserAvatarCacheBustToken.value = Date.now();
-    void syncCurrentUserProfile({
-      clearDisplayAssetCache: true,
-    });
+    assetCacheStore.clearBlobAssetUrlCache();
+    void syncCurrentUserProfile();
   }
 
   /**
@@ -2804,7 +2746,6 @@ export function useTranslatorView() {
   }
 
   onMounted(() => {
-    syncDarkThemeState();
     void syncCurrentUserProfile();
 
     window.addEventListener(
@@ -2815,15 +2756,6 @@ export function useTranslatorView() {
     window.addEventListener("keyup", handleGlobalKeyup);
     window.addEventListener("mousemove", handleGlobalMouseMove);
     window.addEventListener("mouseup", handleGlobalMouseUp);
-
-    themeObserver = new MutationObserver(() => {
-      syncDarkThemeState();
-    });
-
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
-    });
   });
 
   watch(
@@ -2843,9 +2775,6 @@ export function useTranslatorView() {
     window.removeEventListener("keyup", handleGlobalKeyup);
     window.removeEventListener("mousemove", handleGlobalMouseMove);
     window.removeEventListener("mouseup", handleGlobalMouseUp);
-
-    themeObserver?.disconnect();
-    themeObserver = null;
     if (isOnlineWorkspace.value && chapterID.value) {
       void onlineWorkspaceStore.flushChapterSaves(chapterID.value);
     }

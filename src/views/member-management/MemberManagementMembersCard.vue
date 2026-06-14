@@ -141,8 +141,11 @@ import {
   UsergroupAddOutlined,
 } from "@ant-design/icons-vue";
 import type { TableColumnsType } from "ant-design-vue";
+import { storeToRefs } from "pinia";
 import type { MemberInfo } from "../../types/domain";
-import { useMemberManagementContext } from "./useMemberManagement";
+import { useMemberManagementStore } from "../../stores/memberManagement";
+
+const memberManagementStore = useMemberManagementStore();
 
 const {
   currentUser,
@@ -155,13 +158,16 @@ const {
   memberSearchResultCount,
   selectedTeamInfo,
   canAccessAdminArea,
+} = storeToRefs(memberManagementStore);
+
+const {
   formatTimestamp,
   resolveRoleEntries,
   resolveMemberAvatarUrl,
   setMemberSearchKeyword,
   openMemberEditModal,
   handleDeleteMember,
-} = useMemberManagementContext();
+} = memberManagementStore;
 
 const memberEmptyText = computed(() => {
   if (!hasSelectedTeam.value) {

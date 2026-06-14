@@ -141,7 +141,7 @@ router.beforeEach(async (to) => {
     try {
       await authStore.ensureCurrentUserProfileLoaded();
     } catch {
-      if (!localStorage.getItem("access_token")) {
+      if (!authStore.isLoggedIn) {
         authStore.clearAccessToken();
         return "/login";
       }

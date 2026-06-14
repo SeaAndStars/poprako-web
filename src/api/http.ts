@@ -10,6 +10,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from "axios";
 import type { ApiErrorPayload } from "../types/common";
+import { useAuthStore } from "../stores/auth";
 
 interface ApiResponseEnvelope<T> {
   code: number;
@@ -96,7 +97,7 @@ class ApiHttpClient {
   private handleRequest(
     config: InternalAxiosRequestConfig,
   ): InternalAxiosRequestConfig {
-    const token = localStorage.getItem("access_token");
+    const token = useAuthStore().accessToken;
     if (token) {
       if (!(config.headers instanceof AxiosHeaders)) {
         config.headers = AxiosHeaders.from(config.headers);
@@ -117,7 +118,7 @@ class ApiHttpClient {
       error.response?.data?.message ?? error.message ?? "请求失败";
 
     if (statusCode === 401) {
-      localStorage.removeItem("access_token");
+      useAuthStore().clearAccessToken();
 
       // 仅当明确开启开发直达模式时，允许保留当前页面联调。
       if (

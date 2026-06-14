@@ -112,7 +112,10 @@ import {
   UsergroupAddOutlined,
 } from "@ant-design/icons-vue";
 import { computed } from "vue";
-import { useMemberManagementContext } from "./useMemberManagement";
+import { storeToRefs } from "pinia";
+import { useMemberManagementStore } from "../../stores/memberManagement";
+
+const memberManagementStore = useMemberManagementStore();
 
 const {
   teamsLoading,
@@ -123,6 +126,9 @@ const {
   hasSelectedTeam,
   canAccessAdminArea,
   selectedTeamInfo,
+} = storeToRefs(memberManagementStore);
+
+const {
   resolveTeamAvatarUrl,
   handleTeamChange,
   handleRefreshClick,
@@ -130,7 +136,7 @@ const {
   openInvitationCenterModal,
   openTeamSettingsModal,
   openMemberCreateModal,
-} = useMemberManagementContext();
+} = memberManagementStore;
 
 const heroHintText = computed(() => {
   if (teams.value.length === 0) {

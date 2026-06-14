@@ -129,8 +129,11 @@
 
 <script setup lang="ts">
 import { DeleteOutlined, TeamOutlined } from "@ant-design/icons-vue";
+import { storeToRefs } from "pinia";
 import AvatarCropUpload from "../../components/AvatarCropUpload.vue";
-import { useMemberManagementContext } from "./useMemberManagement";
+import { useMemberManagementStore } from "../../stores/memberManagement";
+
+const memberManagementStore = useMemberManagementStore();
 
 const {
   members,
@@ -140,10 +143,13 @@ const {
   teamAvatarResetToken,
   selectedTeamAvatarFile,
   teamAvatarSubmitting,
+} = storeToRefs(memberManagementStore);
+
+const {
   formatTimestamp,
   resolveTeamAvatarUrl,
   handleTeamAvatarFileChange,
   handleTeamAvatarUpload,
   openTeamDeleteModal,
-} = useMemberManagementContext();
+} = memberManagementStore;
 </script>
