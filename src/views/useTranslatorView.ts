@@ -43,6 +43,7 @@ import {
   type TranslatorCollaboratorIdentity,
   type TranslatorPageEditorState,
   type TranslatorPageSnapshot,
+  type PageLiveDelta,
 } from "../stores/translatorCollaboration";
 import type { UserInfo } from "../types/domain";
 import {
@@ -50,6 +51,7 @@ import {
   nextTick,
   onBeforeUnmount,
   onMounted,
+  ref,
   watch,
 } from "vue";
 import { Modal, message } from "ant-design-vue";
@@ -63,8 +65,8 @@ import {
 } from "../api/modules";
 import {
   appendCacheBustQueryToSharedAssetUrl,
-  appendCacheBustQueryToUrl,
 } from "../api/objectStorage";
+import { TRANSLATOR_INTERACTION_TICK_MS } from "../translator/interactionTick";
 
 export const USER_PROFILE_UPDATED_EVENT = "poprako:user-profile-updated";
 
@@ -88,6 +90,7 @@ export function useTranslatorView() {
   const onlineWorkspaceStore = useOnlineWorkspaceStore();
   const specialSymbolsStore = useSpecialSymbolsStore();
   const assetCacheStore = useAssetCacheStore();
+  const { displayAssetUrlCache } = storeToRefs(assetCacheStore);
   const themeStore = useThemeStore();
   const translatorSettingsStore = useTranslatorSettingsStore();
   const translatorUIStore = useTranslatorUIStore();
@@ -127,6 +130,8 @@ export function useTranslatorView() {
     markerDragOrigX,
     markerDragOrigY,
     markerDragMoved,
+    markerDragPreview,
+    markerDragOverlayRect,
   } = storeToRefs(translatorUIStore);
   const {
     projectState,
@@ -137,7 +142,24 @@ export function useTranslatorView() {
     isCurrentPageLockedByOther,
     pageEditorsByPageKey,
     pageSnapshots,
+    latestLiveDelta,
   } = storeToRefs(translatorCollaborationStore);
+  const lastAppliedLiveDeltaSeqByPageKey = ref<Record<string, number>>({});
+  let pendingRemoteLiveDelta: PageLiveDelta | null = null;
+  let remoteLiveDeltaRafId: number | null = null;
+  let lastRemoteLiveDeltaAppliedAt = 0;
+  /** 待合并的标记拖拽 mousemove 事件。 */
+  let pendingMarkerDragEvent: MouseEvent | null = null;
+  /** 标记拖拽 rAF 帧 ID。 */
+  let markerDragRafId: number | null = null;
+  let lastMarkerDragPreviewAt = 0;
+  /** 待合并的文本编辑同步。 */
+  let pendingTextFieldSync: {
+    field: EditableFieldKey;
+    value: string;
+  } | null = null;
+  let textFieldSyncRafId: number | null = null;
+  let lastTextFieldSyncAt = 0;
   const pendingRelatedUserProfileLoads = new Map<
     string,
     Promise<UserInfo | null>
@@ -305,6 +327,21 @@ export function useTranslatorView() {
       currentUserProfile.value?.username ||
       "当前成员"
     );
+  });
+
+  /** 关联用户资料变更序号，驱动侧栏头像重绘。 */
+  const relatedUserProfilesRevision = computed(() => {
+    return Object.entries(relatedUserProfiles.value)
+      .map(
+        ([userID, userProfile]) =>
+          `${userID}:${userProfile.updated_at ?? 0}:${resolveUserAvatarRawURL(userProfile) ?? ""}`,
+      )
+      .join("|");
+  });
+
+  /** 资源 URL 缓存变更序号，异步解析完成后刷新头像。 */
+  const displayAssetCacheRevision = computed(() => {
+    return Object.keys(displayAssetUrlCache.value).length;
   });
 
   function resolveDisplayAssetUrl(rawUrl: string | undefined): string | undefined {
@@ -526,18 +563,14 @@ export function useTranslatorView() {
     projectUnit: LocalProjectUnit,
     role: UnitOwnerRole,
   ): string | undefined {
+    const ownerUserID = resolveUnitOwnerUserID(projectUnit, role);
     const ownerProfile = resolveUnitOwnerUser(projectUnit, role);
-    const collaboratorIdentity = resolveKnownCollaboratorIdentity(
-      resolveUnitOwnerUserID(projectUnit, role),
-    );
+    if (ownerProfile) {
+      return assetCacheStore.resolveUserAvatarUrl(ownerProfile);
+    }
 
-    return resolveDisplayAssetUrl(
-      ownerProfile
-        ? appendCacheBustQueryToUrl(
-            resolveUserAvatarRawURL(ownerProfile),
-            ownerProfile.updated_at,
-          )
-        : collaboratorIdentity?.avatar_url,
+    return assetCacheStore.resolveAvatarDisplayUrl(
+      resolveKnownCollaboratorIdentity(ownerUserID)?.avatar_url,
     );
   }
 
@@ -551,6 +584,37 @@ export function useTranslatorView() {
         .charAt(0)
         .toUpperCase() || "协"
     );
+  }
+
+  /**
+   * 生成侧栏 v-memo 用的归属缓存键，资料异步加载或改名后触发重绘。
+   */
+  function resolveUnitOwnerMemoKey(
+    projectUnit: LocalProjectUnit,
+    role: UnitOwnerRole,
+  ): string {
+    const ownerUserID = resolveUnitOwnerUserID(projectUnit, role);
+    if (!ownerUserID) {
+      return "";
+    }
+
+    const ownerProfile = relatedUserProfiles.value[ownerUserID];
+    if (ownerProfile) {
+      return [
+        ownerUserID,
+        ownerProfile.updated_at ?? 0,
+        resolveUserDisplayName(ownerProfile, ownerUserID),
+        assetCacheStore.resolveUserAvatarUrl(ownerProfile) ?? "",
+      ].join(":");
+    }
+
+    const collaboratorIdentity =
+      relatedCollaboratorIdentities.value[ownerUserID];
+    return [
+      ownerUserID,
+      collaboratorIdentity?.display_name ?? "",
+      collaboratorIdentity?.avatar_url ?? "",
+    ].join(":");
   }
 
   async function ensureUserProfileLoaded(
@@ -1282,6 +1346,46 @@ export function useTranslatorView() {
     applyIncomingPageSnapshot(nextSnapshot);
   });
 
+  watch(latestLiveDelta, (nextDelta) => {
+    if (!nextDelta) {
+      return;
+    }
+
+    pendingRemoteLiveDelta = nextDelta;
+    if (remoteLiveDeltaRafId !== null) {
+      return;
+    }
+
+    remoteLiveDeltaRafId = window.requestAnimationFrame(tickRemoteLiveDeltaApply);
+  });
+
+  function cancelRemoteLiveDeltaRaf(): void {
+    if (remoteLiveDeltaRafId !== null) {
+      window.cancelAnimationFrame(remoteLiveDeltaRafId);
+      remoteLiveDeltaRafId = null;
+    }
+  }
+
+  function tickRemoteLiveDeltaApply(): void {
+    remoteLiveDeltaRafId = null;
+
+    if (!pendingRemoteLiveDelta) {
+      return;
+    }
+
+    if (
+      Date.now() - lastRemoteLiveDeltaAppliedAt >=
+      TRANSLATOR_INTERACTION_TICK_MS
+    ) {
+      applyIncomingPageLiveDelta(pendingRemoteLiveDelta);
+      pendingRemoteLiveDelta = null;
+      lastRemoteLiveDeltaAppliedAt = Date.now();
+      return;
+    }
+
+    remoteLiveDeltaRafId = window.requestAnimationFrame(tickRemoteLiveDeltaApply);
+  }
+
   const currentOnlineWorkspaceArgs = computed(() => {
     if (!isOnlineWorkspace.value || !chapterID.value) {
       return null;
@@ -1349,6 +1453,100 @@ export function useTranslatorView() {
   }
 
   /**
+   * 统一应用远端实时增量，仅 patch 受影响字段。
+   */
+  function applyIncomingPageLiveDelta(delta: PageLiveDelta): void {
+    if (
+      !projectRecord.value ||
+      !currentPageMeta.value ||
+      delta.page_key !== currentPageCollaborationKey.value
+    ) {
+      return;
+    }
+
+    const lastSeq = lastAppliedLiveDeltaSeqByPageKey.value[delta.page_key] ?? 0;
+    if (delta.seq <= lastSeq) {
+      return;
+    }
+
+    lastAppliedLiveDeltaSeqByPageKey.value = {
+      ...lastAppliedLiveDeltaSeqByPageKey.value,
+      [delta.page_key]: delta.seq,
+    };
+
+    if (
+      delta.updated_by_user_id === currentUserProfile.value?.id &&
+      hasCurrentPageLock.value
+    ) {
+      return;
+    }
+
+    rememberCollaboratorIdentity({
+      user_id: delta.updated_by_user_id,
+      display_name: delta.updated_by_display_name,
+    });
+
+    let nextUnits = cloneUnits(currentPageUnits.value);
+
+    delta.moves.forEach((move) => {
+      nextUnits = nextUnits.map((projectUnit) => {
+        if (projectUnit.id !== move.unit_id) {
+          return projectUnit;
+        }
+
+        return {
+          ...projectUnit,
+          x_coord: move.x_coord,
+          y_coord: move.y_coord,
+        };
+      });
+    });
+
+    delta.text_changes.forEach((change) => {
+      nextUnits = nextUnits.map((projectUnit) => {
+        if (projectUnit.id !== change.unit_id) {
+          return projectUnit;
+        }
+
+        const ownershipPatch: Partial<LocalProjectUnit> = {
+          last_edited_by: delta.updated_by_display_name,
+          last_edited_at: delta.updated_at,
+        };
+        const editorUserID = delta.updated_by_user_id?.trim();
+        if (editorUserID) {
+          if (change.field === "translated_text") {
+            ownershipPatch.translator_id = editorUserID;
+          } else if (change.field === "proofread_text") {
+            ownershipPatch.proofreader_id = editorUserID;
+          }
+        }
+
+        return {
+          ...projectUnit,
+          ...ownershipPatch,
+          [change.field]: change.value,
+        } as LocalProjectUnit;
+      });
+    });
+
+    currentPageUnits.value = nextUnits;
+    void ensureCurrentPageOwnerProfilesLoaded(nextUnits);
+
+    if (isOnlineWorkspace.value) {
+      onlineWorkspaceStore.replaceRuntimePageUnits(
+        currentPageMeta.value.id,
+        nextUnits,
+      );
+    } else {
+      localProjectsStore.replacePageUnits(
+        projectRecord.value.id,
+        currentPageMeta.value.id,
+        nextUnits,
+      );
+    }
+  }
+
+  /**
    * 统一应用远端页面快照，并同步回本地持久化层。
    */
   function applyIncomingPageSnapshot(snapshot: TranslatorPageSnapshot): void {
@@ -1391,7 +1589,9 @@ export function useTranslatorView() {
       editingUnitID.value = null;
     }
 
-    focusActiveFieldLater(false);
+    if (!editingUnitID.value) {
+      focusActiveFieldLater(false);
+    }
   }
 
   function handlePageSelectChange(nextPageIndex: number): void {
@@ -1534,9 +1734,24 @@ export function useTranslatorView() {
   }
 
   /**
-   * 将当前页草稿同步回 store，并更新项目统计。
+   * 在线编辑落库前先 flush WS 协作通道。
    */
-  function persistCurrentPageUnits(nextUnits: LocalProjectUnit[]): void {
+  async function flushOnlineCollaborationPersist(options?: {
+    force?: boolean;
+  }): Promise<void> {
+    if (!isOnlineWorkspace.value) {
+      return;
+    }
+
+    flushPendingTextFieldSync();
+    await translatorCollaborationStore.flushLiveDelta(options);
+    await translatorCollaborationStore.flushPendingPageSnapshotSync(options);
+  }
+
+  /**
+   * 将当前页草稿同步到本地 store 与在线缓存。
+   */
+  function syncLocalPageUnits(nextUnits: LocalProjectUnit[]): void {
     if (!projectRecord.value || !currentPageMeta.value) {
       return;
     }
@@ -1547,11 +1762,6 @@ export function useTranslatorView() {
     }));
 
     if (isOnlineWorkspace.value) {
-      onlineWorkspaceStore.schedulePageUnitsSave(
-        chapterID.value,
-        currentPageMeta.value.id,
-        currentPageUnits.value,
-      );
       onlineWorkspaceStore.replaceRuntimePageUnits(
         currentPageMeta.value.id,
         currentPageUnits.value,
@@ -1563,7 +1773,13 @@ export function useTranslatorView() {
         currentPageUnits.value,
       );
     }
+  }
 
+  /**
+   * 将当前页草稿同步回 store，并广播整页协作快照。
+   */
+  function persistCurrentPageUnits(nextUnits: LocalProjectUnit[]): void {
+    syncLocalPageUnits(nextUnits);
     translatorCollaborationStore.schedulePageSnapshotSync(
       currentPageUnits.value,
     );
@@ -1697,6 +1913,7 @@ export function useTranslatorView() {
           chapterID.value,
           currentPageIndex.value,
         );
+        await flushOnlineCollaborationPersist();
         await onlineWorkspaceStore.flushChapterSaves(chapterID.value);
       } else {
         localProjectsStore.updateLastPageIndex(
@@ -1896,6 +2113,7 @@ export function useTranslatorView() {
 
         try {
           if (!isReverting) {
+            await flushOnlineCollaborationPersist();
             await onlineWorkspaceStore.flushPageUnits(
               chapterID.value,
               targetPageID,
@@ -1967,9 +2185,9 @@ export function useTranslatorView() {
   }
 
   /**
-   * 更新选中标记的任意字段。
+   * 立即将选中标记字段写入本地与协作通道。
    */
-  function updateSelectedUnitField(
+  function applySelectedUnitFieldUpdate(
     field: EditableFieldKey,
     nextValue: string,
   ): void {
@@ -1990,7 +2208,72 @@ export function useTranslatorView() {
       } as Partial<LocalProjectUnit>);
     });
 
-    persistCurrentPageUnits(nextUnits);
+    syncLocalPageUnits(nextUnits);
+    translatorCollaborationStore.scheduleLiveDelta({
+      textChanges: [
+        {
+          unit_id: selectedUnit.value.id,
+          field,
+          value: nextValue,
+        },
+      ],
+    });
+  }
+
+  function cancelTextFieldSyncRaf(): void {
+    if (textFieldSyncRafId !== null) {
+      window.cancelAnimationFrame(textFieldSyncRafId);
+      textFieldSyncRafId = null;
+    }
+  }
+
+  function flushPendingTextFieldSync(): void {
+    cancelTextFieldSyncRaf();
+    if (!pendingTextFieldSync) {
+      return;
+    }
+
+    const pending = pendingTextFieldSync;
+    pendingTextFieldSync = null;
+    applySelectedUnitFieldUpdate(pending.field, pending.value);
+    lastTextFieldSyncAt = Date.now();
+  }
+
+  function tickTextFieldSync(): void {
+    textFieldSyncRafId = null;
+
+    if (!pendingTextFieldSync) {
+      return;
+    }
+
+    if (Date.now() - lastTextFieldSyncAt >= TRANSLATOR_INTERACTION_TICK_MS) {
+      flushPendingTextFieldSync();
+      return;
+    }
+
+    textFieldSyncRafId = window.requestAnimationFrame(tickTextFieldSync);
+  }
+
+  function queueSelectedUnitFieldUpdate(
+    field: EditableFieldKey,
+    nextValue: string,
+  ): void {
+    pendingTextFieldSync = { field, value: nextValue };
+    if (textFieldSyncRafId === null) {
+      textFieldSyncRafId = window.requestAnimationFrame(tickTextFieldSync);
+    }
+  }
+
+  /**
+   * 更新选中标记的任意字段。
+   */
+  function updateSelectedUnitField(
+    field: EditableFieldKey,
+    nextValue: string,
+  ): void {
+    flushPendingTextFieldSync();
+    applySelectedUnitFieldUpdate(field, nextValue);
+    lastTextFieldSyncAt = Date.now();
   }
 
   /**
@@ -1998,7 +2281,7 @@ export function useTranslatorView() {
    */
   function handleTextFieldInput(field: EditableFieldKey, event: Event): void {
     const target = event.target as HTMLTextAreaElement;
-    updateSelectedUnitField(field, target.value);
+    queueSelectedUnitFieldUpdate(field, target.value);
     target.style.height = "auto";
     target.style.height = `${target.scrollHeight}px`;
   }
@@ -2036,6 +2319,7 @@ export function useTranslatorView() {
   }
 
   function handleUnitFieldBlur(): void {
+    flushPendingTextFieldSync();
     window.requestAnimationFrame(() => {
       editingUnitID.value = resolveSelectedTextareaTarget(
         document.activeElement,
@@ -2270,6 +2554,8 @@ export function useTranslatorView() {
       return;
     }
 
+    flushPendingTextFieldSync();
+
     const activeCard = resolveSelectedUnitCardElement();
 
     activeCard
@@ -2489,6 +2775,82 @@ export function useTranslatorView() {
   }
 
   /* ── 标记拖拽 ── */
+  function cancelMarkerDragRaf(): void {
+    if (markerDragRafId !== null) {
+      cancelAnimationFrame(markerDragRafId);
+      markerDragRafId = null;
+    }
+    pendingMarkerDragEvent = null;
+  }
+
+  function applyMarkerDragMoveFromEvent(event: MouseEvent): void {
+    if (!draggingUnitID.value) {
+      return;
+    }
+
+    const overlayRect = markerDragOverlayRect.value;
+    if (!overlayRect) {
+      return;
+    }
+
+    const dx = event.clientX - markerDragStartX.value;
+    const dy = event.clientY - markerDragStartY.value;
+    if (!markerDragMoved.value && Math.abs(dx) + Math.abs(dy) < 4) {
+      return;
+    }
+    markerDragMoved.value = true;
+
+    const nextX = Math.max(
+      0,
+      Math.min(1, markerDragOrigX.value + dx / overlayRect.width),
+    );
+    const nextY = Math.max(
+      0,
+      Math.min(1, markerDragOrigY.value + dy / overlayRect.height),
+    );
+
+    markerDragPreview.value = {
+      unitId: draggingUnitID.value,
+      x: nextX,
+      y: nextY,
+    };
+    translatorCollaborationStore.scheduleLiveDelta({
+      moves: [
+        {
+          unit_id: draggingUnitID.value,
+          x_coord: nextX,
+          y_coord: nextY,
+        },
+      ],
+    });
+  }
+
+  function flushMarkerDragMove(): void {
+    const event = pendingMarkerDragEvent;
+    pendingMarkerDragEvent = null;
+    if (!event) {
+      return;
+    }
+
+    applyMarkerDragMoveFromEvent(event);
+    lastMarkerDragPreviewAt = Date.now();
+  }
+
+  function tickMarkerDragMove(): void {
+    markerDragRafId = null;
+
+    if (!pendingMarkerDragEvent || !draggingUnitID.value) {
+      return;
+    }
+
+    if (Date.now() - lastMarkerDragPreviewAt >= TRANSLATOR_INTERACTION_TICK_MS) {
+      flushMarkerDragMove();
+      return;
+    }
+
+    markerDragRafId = window.requestAnimationFrame(tickMarkerDragMove);
+  }
+
   function handleMarkerDragStart(event: MouseEvent, unitID: string): void {
     if (!currentPageCanMutateStructure.value) {
       message.warning(currentPageLockHint.value);
@@ -2509,39 +2871,48 @@ export function useTranslatorView() {
       markerDragOrigX.value = unit.x_coord;
       markerDragOrigY.value = unit.y_coord;
       markerDragMoved.value = false;
+      markerDragPreview.value = {
+        unitId: unitID,
+        x: unit.x_coord,
+        y: unit.y_coord,
+      };
+      const overlayEl = stageOverlayRef.value;
+      markerDragOverlayRect.value = overlayEl
+        ? overlayEl.getBoundingClientRect()
+        : null;
+      lastMarkerDragPreviewAt = 0;
       event.preventDefault();
     })();
   }
 
   function handleMarkerDragMove(event: MouseEvent): void {
-    if (!draggingUnitID.value) return;
-    const overlayEl = stageOverlayRef.value;
-    if (!overlayEl) return;
+    if (!draggingUnitID.value) {
+      return;
+    }
 
-    const dx = event.clientX - markerDragStartX.value;
-    const dy = event.clientY - markerDragStartY.value;
-    if (!markerDragMoved.value && Math.abs(dx) + Math.abs(dy) < 4) return;
-    markerDragMoved.value = true;
-
-    const overlayRect = overlayEl.getBoundingClientRect();
-    const nextX = markerDragOrigX.value + dx / overlayRect.width;
-    const nextY = markerDragOrigY.value + dy / overlayRect.height;
-
-    const nextUnits = currentPageUnits.value.map((u) => {
-      if (u.id !== draggingUnitID.value) return u;
-      return buildTouchedUnit(u, {
-        x_coord: Math.max(0, Math.min(1, nextX)),
-        y_coord: Math.max(0, Math.min(1, nextY)),
-      });
-    });
-    persistCurrentPageUnits(nextUnits);
+    pendingMarkerDragEvent = event;
+    if (markerDragRafId === null) {
+      markerDragRafId = window.requestAnimationFrame(tickMarkerDragMove);
+    }
   }
 
   function handleMarkerDragEnd(event?: MouseEvent): void {
-    if (!draggingUnitID.value) return;
+    if (!draggingUnitID.value) {
+      return;
+    }
+
+    if (pendingMarkerDragEvent) {
+      applyMarkerDragMoveFromEvent(pendingMarkerDragEvent);
+    }
+    cancelMarkerDragRaf();
+
     const unitID = draggingUnitID.value;
     const didMove = markerDragMoved.value;
+    const preview = markerDragPreview.value;
+
     draggingUnitID.value = null;
+    markerDragPreview.value = null;
+    markerDragOverlayRect.value = null;
     /* markerDragMoved 延迟重置——同 stageDragMoved，
        避免 mouseup 之后的 click 事件误创建标记。 */
     if (markerDragMoved.value) {
@@ -2551,6 +2922,22 @@ export function useTranslatorView() {
     }
     if (event) {
       handleSelectUnit(unitID, !didMove);
+    }
+
+    if (didMove && preview?.unitId === unitID) {
+      const nextUnits = currentPageUnits.value.map((projectUnit) => {
+        if (projectUnit.id !== unitID) {
+          return projectUnit;
+        }
+
+        return buildTouchedUnit(projectUnit, {
+          x_coord: preview.x,
+          y_coord: preview.y,
+        });
+      });
+      syncLocalPageUnits(nextUnits);
+      void translatorCollaborationStore.flushLiveDelta();
+      void translatorCollaborationStore.flushPendingPageSnapshotSync();
     }
   }
 
@@ -2767,6 +3154,9 @@ export function useTranslatorView() {
   );
 
   onBeforeUnmount(() => {
+    cancelMarkerDragRaf();
+    cancelRemoteLiveDeltaRaf();
+    flushPendingTextFieldSync();
     window.removeEventListener(
       USER_PROFILE_UPDATED_EVENT,
       handleUserProfileUpdated,
@@ -2776,8 +3166,14 @@ export function useTranslatorView() {
     window.removeEventListener("mousemove", handleGlobalMouseMove);
     window.removeEventListener("mouseup", handleGlobalMouseUp);
     if (isOnlineWorkspace.value && chapterID.value) {
-      void onlineWorkspaceStore.flushChapterSaves(chapterID.value);
+      void (async () => {
+        await flushOnlineCollaborationPersist({ force: true });
+        await onlineWorkspaceStore.flushChapterSaves(chapterID.value);
+        await translatorCollaborationStore.disconnectProjectSession();
+      })();
+      return;
     }
+
     void translatorCollaborationStore.disconnectProjectSession();
   });
 
@@ -2785,6 +3181,7 @@ export function useTranslatorView() {
     projectRecord,
     isDragging,
     draggingUnitID,
+    markerDragPreview,
     handleReturnToWorkspace,
     workspaceHeaderTitle,
     activeProjectEditors,
@@ -2795,6 +3192,9 @@ export function useTranslatorView() {
     resolveUnitOwnerAvatarURL,
     resolveUnitOwnerInitial,
     resolveUnitOwnerDisplayName,
+    resolveUnitOwnerMemoKey,
+    relatedUserProfilesRevision,
+    displayAssetCacheRevision,
     currentPageMeta,
     currentPageIndex,
     moveToPreviousPage,

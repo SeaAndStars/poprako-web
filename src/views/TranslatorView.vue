@@ -484,10 +484,20 @@
 
               <TranslatorMarker
                 v-for="projectUnit in currentPageUnits"
-                :key="`${projectUnit.id}_${markerSizeSliderDraft}_${markerOpacitySliderDraft}`"
+                :key="projectUnit.id"
                 :index="projectUnit.index"
-                :x="projectUnit.x_coord"
-                :y="projectUnit.y_coord"
+                :x="
+                  draggingUnitID === projectUnit.id &&
+                  markerDragPreview?.unitId === projectUnit.id
+                    ? markerDragPreview.x
+                    : projectUnit.x_coord
+                "
+                :y="
+                  draggingUnitID === projectUnit.id &&
+                  markerDragPreview?.unitId === projectUnit.id
+                    ? markerDragPreview.y
+                    : projectUnit.y_coord
+                "
                 :size="markerSizeSliderDraft"
                 :opacity="markerOpacityValue"
                 :active="projectUnit.id === selectedUnitID"
@@ -519,6 +529,23 @@
           <div
             v-for="projectUnit in currentPageUnits"
             :key="projectUnit.id"
+            v-memo="[
+              projectUnit.id,
+              selectedUnitID,
+              editingUnitID,
+              editorMode,
+              projectUnit.translated_text,
+              projectUnit.proofread_text,
+              projectUnit.is_bubble,
+              projectUnit.translator_id,
+              projectUnit.proofreader_id,
+              resolveUnitOwnerMemoKey(projectUnit, 'translate'),
+              resolveUnitOwnerMemoKey(projectUnit, 'proofread'),
+              relatedUserProfilesRevision,
+              displayAssetCacheRevision,
+              isUnitTranslated(projectUnit),
+              isUnitProofread(projectUnit),
+            ]"
             class="translator-unit-card"
             :class="{
               'is-active': projectUnit.id === selectedUnitID,
@@ -942,6 +969,7 @@ const {
   projectRecord,
   isDragging,
   draggingUnitID,
+  markerDragPreview,
   handleReturnToWorkspace,
   workspaceHeaderTitle,
   activeProjectEditors,
@@ -952,6 +980,9 @@ const {
   resolveUnitOwnerAvatarURL,
   resolveUnitOwnerInitial,
   resolveUnitOwnerDisplayName,
+  resolveUnitOwnerMemoKey,
+  relatedUserProfilesRevision,
+  displayAssetCacheRevision,
   currentPageMeta,
   currentPageIndex,
   moveToPreviousPage,

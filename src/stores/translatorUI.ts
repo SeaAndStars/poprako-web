@@ -11,6 +11,16 @@ import type { TranslatorCollaboratorIdentity } from "./translatorCollaboration";
 /** 可编辑文本字段键值。 */
 export type EditableFieldKey = "translated_text" | "proofread_text";
 
+/** 标记拖拽预览坐标（拖拽期间不写回 currentPageUnits）。 */
+export interface MarkerDragPreview {
+  /** 正在拖拽的标记 ID。 */
+  unitId: string;
+  /** 预览归一化 X（0–1）。 */
+  x: number;
+  /** 预览归一化 Y（0–1）。 */
+  y: number;
+}
+
 /** 翻译器 UI 会话状态 Store。 */
 export const useTranslatorUIStore = defineStore("translator-ui", () => {
   /** 当前编辑模式（翻译/校对）。 */
@@ -68,6 +78,10 @@ export const useTranslatorUIStore = defineStore("translator-ui", () => {
   const markerDragOrigY = ref(0);
   /** 标记是否发生过有效拖拽位移。 */
   const markerDragMoved = ref(false);
+  /** 拖拽中的临时坐标预览（避免每帧整页同步）。 */
+  const markerDragPreview = ref<MarkerDragPreview | null>(null);
+  /** 拖拽开始时缓存的 overlay 布局矩形。 */
+  const markerDragOverlayRect = ref<DOMRect | null>(null);
 
   /** 已加载的关联用户资料缓存。 */
   const relatedUserProfiles = ref<Record<string, UserInfo>>({});
@@ -110,6 +124,8 @@ export const useTranslatorUIStore = defineStore("translator-ui", () => {
     markerDragOrigX.value = 0;
     markerDragOrigY.value = 0;
     markerDragMoved.value = false;
+    markerDragPreview.value = null;
+    markerDragOverlayRect.value = null;
   }
 
   return {
@@ -138,6 +154,8 @@ export const useTranslatorUIStore = defineStore("translator-ui", () => {
     markerDragOrigX,
     markerDragOrigY,
     markerDragMoved,
+    markerDragPreview,
+    markerDragOverlayRect,
     relatedUserProfiles,
     relatedCollaboratorIdentities,
     currentUserProfile,
