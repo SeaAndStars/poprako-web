@@ -12,6 +12,7 @@ import {
   getMyAssignments,
 } from "../api/modules";
 import { useLocalProjectsStore } from "./localProjects";
+import { useTranslatorCollaborationStore } from "./translatorCollaboration";
 import type { AssignmentInfo } from "../types/domain";
 import { parsePageRange } from "../utils/pageRange";
 
@@ -148,6 +149,31 @@ function resolveProgressPercent(completed: number, total: number): number {
   }
 
   return Math.max(0, Math.min(100, Math.round((completed / total) * 100)));
+}
+
+/**
+ * 规范化章节标记统计，防止后端 delta 漂移导致展示超出总数。
+ */
+function normalizeUnitProgressStats(
+  totalUnitCount: number,
+  translatedUnitCount: number,
+  proofreadUnitCount: number,
+) {
+  const safeTotal = Math.max(totalUnitCount, 0);
+  const safeTranslated = Math.min(
+    Math.max(translatedUnitCount, 0),
+    safeTotal,
+  );
+  const safeProofread = Math.min(
+    Math.max(proofreadUnitCount, 0),
+    safeTranslated,
+  );
+
+  return {
+    totalUnitCount: safeTotal,
+    translatedUnitCount: safeTranslated,
+    proofreadUnitCount: safeProofread,
+  };
 }
 
 /**
@@ -368,12 +394,20 @@ export const useDashboardStore = defineStore("dashboard", () => {
 
     return Array.from(participationsByChapter.values())
       .map((participationEntry) => {
-        const totalUnitCount = participationEntry.totalUnitCount;
-        const translatedUnitCount = participationEntry.translatedUnitCount;
-        const proofreadUnitCount = participationEntry.proofreadUnitCount;
+        const normalizedStats = normalizeUnitProgressStats(
+          participationEntry.totalUnitCount,
+          participationEntry.translatedUnitCount,
+          participationEntry.proofreadUnitCount,
+        );
+        const totalUnitCount = normalizedStats.totalUnitCount;
+        const translatedUnitCount = normalizedStats.translatedUnitCount;
+        const proofreadUnitCount = normalizedStats.proofreadUnitCount;
 
         return {
           ...participationEntry,
+          totalUnitCount,
+          translatedUnitCount,
+          proofreadUnitCount,
           translatedProgressPercent: resolveProgressPercent(
             translatedUnitCount,
             totalUnitCount,
@@ -565,6 +599,11 @@ export const useDashboardStore = defineStore("dashboard", () => {
     };
 
     try {
+      const translatorCollaborationStore = useTranslatorCollaborationStore();
+      await translatorCollaborationStore.prepareChapterForManuscriptExport(
+        chapterEntry.chapterId,
+      );
+
       const chapterBlob = await exportChapterManuscriptPackage(
         chapterEntry.chapterId,
         pageRange,
