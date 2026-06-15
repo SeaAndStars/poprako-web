@@ -184,6 +184,7 @@ export function formatParticipationTimestamp(timestamp?: number): string {
  * Dashboard 工作区 Store。
  */
 export const useDashboardStore = defineStore("dashboard", () => {
+  const router = useRouter();
   const localProjectsStore = useLocalProjectsStore();
   const { projects, activeProject } = storeToRefs(localProjectsStore);
 
@@ -496,7 +497,6 @@ export const useDashboardStore = defineStore("dashboard", () => {
    */
   function handleOpenProject(projectID: string): void {
     localProjectsStore.setActiveProject(projectID);
-    const router = useRouter();
     void router.push(`/translator/${projectID}`);
   }
 
@@ -507,7 +507,6 @@ export const useDashboardStore = defineStore("dashboard", () => {
     chapterEntry: WorkspaceParticipationEntry,
     mode: WorkspaceParticipationMode,
   ): void {
-    const router = useRouter();
     void router.push({
       name: "online-translator",
       params: {
