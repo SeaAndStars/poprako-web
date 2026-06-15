@@ -669,6 +669,10 @@
   cursor: grabbing;
 }
 
+.translator-stage.is-panning .translator-stage__media {
+  transition: none;
+}
+
 .translator-stage__media {
   position: relative;
   display: inline-block;
