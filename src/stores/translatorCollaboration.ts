@@ -18,9 +18,11 @@ import {
   type LocalProjectUnit,
 } from "../local-project/types";
 import { useAuthStore } from "./auth";
+import { buildOnlineChapterCollaborationKey } from "../online-workspace/collaboration";
+import { TRANSLATOR_INTERACTION_TICK_MS } from "../translator/interactionTick";
 
-const DEFAULT_PAGE_SNAPSHOT_SYNC_DELAY_MS = 120;
-const LARGE_PAGE_SNAPSHOT_SYNC_DELAY_MS = 400;
+const DEFAULT_PAGE_SNAPSHOT_SYNC_DELAY_MS = TRANSLATOR_INTERACTION_TICK_MS;
+const LARGE_PAGE_SNAPSHOT_SYNC_DELAY_MS = TRANSLATOR_INTERACTION_TICK_MS;
 const LARGE_PAGE_SNAPSHOT_UNIT_THRESHOLD = 200;
 const LARGE_PAGE_SNAPSHOT_SOFT_LIMIT_BYTES = 256 * 1024;
 
@@ -58,6 +60,39 @@ export interface TranslatorPageSnapshot {
   updated_at: number;
   units: LocalProjectUnit[];
 }
+
+/** 标记坐标实时增量。 */
+export interface TranslatorPageUnitMoveDelta {
+  unit_id: string;
+  x_coord: number;
+  y_coord: number;
+}
+
+/** 文本字段实时增量。 */
+export interface TranslatorPageUnitTextChangeDelta {
+  unit_id: string;
+  field: string;
+  value: string;
+}
+
+/** 页面实时增量广播载荷。 */
+export interface PageLiveDelta {
+  project_key: string;
+  page_key: string;
+  seq: number;
+  moves: TranslatorPageUnitMoveDelta[];
+  text_changes: TranslatorPageUnitTextChangeDelta[];
+  updated_by_user_id: string;
+  updated_by_display_name: string;
+  updated_at: number;
+}
+
+interface PendingLiveDeltaState {
+  moves: Map<string, TranslatorPageUnitMoveDelta>;
+  textChanges: Map<string, TranslatorPageUnitTextChangeDelta>;
+}
+
+const LIVE_DELTA_SYNC_INTERVAL_MS = TRANSLATOR_INTERACTION_TICK_MS;
 
 interface JoinProjectArgs extends TranslatorCollaboratorIdentity {
   project_key: string;
@@ -316,6 +351,17 @@ export const useTranslatorCollaborationStore = defineStore(
     let pendingSnapshotTimer: number | null = null;
     let connectionStartPromise: Promise<HubConnection> | null = null;
     const pendingSnapshotArgs = ref<PendingSnapshotArgs | null>(null);
+    let liveDeltaRafId: number | null = null;
+    let lastLiveDeltaSentAt = 0;
+    let liveDeltaSeq = 0;
+    const pendingLiveDelta = ref<PendingLiveDeltaState | null>(null);
+    const latestLiveDelta = ref<PageLiveDelta | null>(null);
+    /** 页面挂起前是否持有编辑锁，用于唤醒后恢复。 */
+    let resumeWithPageLock = false;
+    /** 防止 visibility/pageshow 并发触发多次恢复。 */
+    let resumeInFlight: Promise<void> | null = null;
+    /** 是否已绑定 Page Lifecycle 监听。 */
+    let pageLifecycleBound = false;
 
     const isConnected = computed(() => {
       return connection.value?.state === HubConnectionState.Connected;
@@ -387,6 +433,9 @@ function resetCollaborationState(clearProfile = true): void {
       activeMode.value = "translate";
       lastKnownUnitsByPageKey.value = {};
       pendingSnapshotArgs.value = null;
+      pendingLiveDelta.value = null;
+      latestLiveDelta.value = null;
+      clearLiveDeltaRaf();
 
       if (clearProfile) {
         sessionProfile.value = null;
@@ -400,6 +449,123 @@ function resetCollaborationState(clearProfile = true): void {
       }
     }
 
+    function clearLiveDeltaRaf(): void {
+      if (liveDeltaRafId !== null) {
+        window.cancelAnimationFrame(liveDeltaRafId);
+        liveDeltaRafId = null;
+      }
+    }
+
+    function scheduleLiveDelta(args: {
+      moves?: TranslatorPageUnitMoveDelta[];
+      textChanges?: TranslatorPageUnitTextChangeDelta[];
+    }): void {
+      if (
+        !activeProjectKey.value ||
+        !activePageKey.value ||
+        !hasCurrentPageLock.value
+      ) {
+        return;
+      }
+
+      if (!pendingLiveDelta.value) {
+        pendingLiveDelta.value = {
+          moves: new Map(),
+          textChanges: new Map(),
+        };
+      }
+
+      args.moves?.forEach((move) => {
+        pendingLiveDelta.value?.moves.set(move.unit_id, move);
+      });
+
+      args.textChanges?.forEach((change) => {
+        pendingLiveDelta.value?.textChanges.set(
+          `${change.unit_id}::${change.field}`,
+          change,
+        );
+      });
+
+      if (liveDeltaRafId === null) {
+        liveDeltaRafId = window.requestAnimationFrame(tickLiveDeltaSync);
+      }
+    }
+
+    function tickLiveDeltaSync(): void {
+      liveDeltaRafId = null;
+
+      if (!pendingLiveDelta.value) {
+        return;
+      }
+
+      if (Date.now() - lastLiveDeltaSentAt >= LIVE_DELTA_SYNC_INTERVAL_MS) {
+        void flushLiveDelta();
+        return;
+      }
+
+      liveDeltaRafId = window.requestAnimationFrame(tickLiveDeltaSync);
+    }
+
+    async function flushLiveDelta(options?: { force?: boolean }): Promise<void> {
+      if (!pendingLiveDelta.value || !sessionProfile.value) {
+        return;
+      }
+
+      if (!hasCurrentPageLock.value && !options?.force) {
+        return;
+      }
+
+      const pending = pendingLiveDelta.value;
+      pendingLiveDelta.value = null;
+
+      const moves = [...pending.moves.values()];
+      const textChanges = [...pending.textChanges.values()];
+      if (moves.length === 0 && textChanges.length === 0) {
+        if (pendingLiveDelta.value) {
+          liveDeltaRafId = window.requestAnimationFrame(tickLiveDeltaSync);
+        }
+        return;
+      }
+
+      liveDeltaSeq += 1;
+      const payload: PageLiveDelta = {
+        project_key: activeProjectKey.value,
+        page_key: activePageKey.value,
+        seq: liveDeltaSeq,
+        moves,
+        text_changes: textChanges,
+        updated_by_user_id: sessionProfile.value.user_id,
+        updated_by_display_name: sessionProfile.value.display_name,
+        updated_at: Date.now(),
+      };
+
+      const activeConnection = connection.value;
+      if (
+        !activeConnection ||
+        activeConnection.state !== HubConnectionState.Connected
+      ) {
+        pendingLiveDelta.value = pending;
+        return;
+      }
+
+      lastLiveDeltaSentAt = Date.now();
+
+      try {
+        await activeConnection.invoke("SyncPageLiveDelta", payload);
+      } catch (error) {
+        console.error("[translator-collaboration] 实时增量同步失败:", error);
+        if (lastKnownUnitsByPageKey.value[activePageKey.value]) {
+          schedulePageSnapshotSync(
+            lastKnownUnitsByPageKey.value[activePageKey.value],
+          );
+        }
+      }
+
+      if (pendingLiveDelta.value) {
+        liveDeltaRafId = window.requestAnimationFrame(tickLiveDeltaSync);
+      }
+    }
+
     function rememberSnapshot(snapshot: TranslatorPageSnapshot): void {
       pageSnapshots.value = {
         ...pageSnapshots.value,
@@ -409,6 +575,124 @@ function resetCollaborationState(clearProfile = true): void {
         ...lastKnownUnitsByPageKey.value,
         [snapshot.page_key]: cloneUnits(snapshot.units),
       };
+    }
+
+    /** 等待 Hub 连接进入目标状态。 */
+    async function waitForConnectionState(
+      targetConnection: HubConnection,
+      desiredState: HubConnectionState,
+      timeoutMs: number,
+    ): Promise<void> {
+      if (targetConnection.state === desiredState) {
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        const startedAt = Date.now();
+        const timer = window.setInterval(() => {
+          if (
+            targetConnection.state === desiredState ||
+            Date.now() - startedAt >= timeoutMs
+          ) {
+            window.clearInterval(timer);
+            resolve();
+          }
+        }, 200);
+      });
+    }
+
+    /** 绑定页面冻结/恢复相关事件。 */
+    function bindPageLifecycleHandlers(): void {
+      if (pageLifecycleBound || typeof document === "undefined") {
+        return;
+      }
+
+      pageLifecycleBound = true;
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      window.addEventListener("pageshow", handlePageShow);
+    }
+
+    /** 解绑页面生命周期事件。 */
+    function unbindPageLifecycleHandlers(): void {
+      if (!pageLifecycleBound || typeof document === "undefined") {
+        return;
+      }
+
+      pageLifecycleBound = false;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pageshow", handlePageShow);
+    }
+
+    /** 页面进入后台：先 flush 待发送数据并记录锁状态。 */
+    function handleVisibilityChange(): void {
+      if (document.visibilityState === "hidden") {
+        resumeWithPageLock = hasCurrentPageLock.value;
+        void flushLiveDelta();
+        void flushPendingPageSnapshotSync();
+        return;
+      }
+
+      void resumeCollaborationAfterPageWake();
+    }
+
+    /** bfcache 恢复时强制重建连接。 */
+    function handlePageShow(event: PageTransitionEvent): void {
+      if (event.persisted) {
+        void resumeCollaborationAfterPageWake(true);
+      }
+    }
+
+    /** 页面从冻结/后台恢复后重建协作会话。 */
+    async function resumeCollaborationAfterPageWake(
+      forceRestart = false,
+    ): Promise<void> {
+      if (!sessionProfile.value || !activeProjectKey.value) {
+        return;
+      }
+
+      if (resumeInFlight) {
+        return resumeInFlight;
+      }
+
+      resumeInFlight = (async () => {
+        const shouldReacquireLock = resumeWithPageLock;
+        let activeConnection = connection.value;
+
+        if (forceRestart && activeConnection) {
+          try {
+            await activeConnection.stop();
+          } catch {
+            // stop 失败时继续走 ensureConnection 兜底。
+          }
+          connection.value = null;
+          activeConnection = null;
+        }
+
+        if (
+          !activeConnection ||
+          activeConnection.state === HubConnectionState.Disconnected
+        ) {
+          activeConnection = await ensureConnection();
+        } else if (
+          activeConnection.state === HubConnectionState.Reconnecting
+        ) {
+          await waitForConnectionState(
+            activeConnection,
+            HubConnectionState.Connected,
+            5000,
+          );
+        }
+
+        if (activeConnection.state !== HubConnectionState.Connected) {
+          activeConnection = await ensureConnection();
+        }
+
+        await restoreSessionAfterReconnect(shouldReacquireLock);
+      })().finally(() => {
+        resumeInFlight = null;
+      });
+
+      return resumeInFlight;
     }
 
     function registerConnectionHandlers(nextConnection: HubConnection): void {
@@ -443,8 +727,16 @@ function resetCollaborationState(clearProfile = true): void {
         },
       );
 
+      nextConnection.on("PageLiveDeltaUpdated", (rawDelta: PageLiveDelta) => {
+        latestLiveDelta.value = rawDelta;
+      });
+
+      nextConnection.onreconnecting(() => {
+        resumeWithPageLock = hasCurrentPageLock.value;
+      });
+
       nextConnection.onreconnected(() => {
-        void restoreSessionAfterReconnect();
+        void restoreSessionAfterReconnect(resumeWithPageLock);
       });
 
       nextConnection.onclose(() => {
@@ -461,6 +753,9 @@ function resetCollaborationState(clearProfile = true): void {
 
         clearPendingSnapshotTimer();
         pendingSnapshotArgs.value = null;
+        clearLiveDeltaRaf();
+        pendingLiveDelta.value = null;
+        latestLiveDelta.value = null;
       });
     }
 
@@ -495,6 +790,7 @@ function resetCollaborationState(clearProfile = true): void {
         try {
           await nextConnection.start();
           connection.value = nextConnection;
+          bindPageLifecycleHandlers();
           return nextConnection;
         } catch (error) {
           try {
@@ -514,7 +810,9 @@ function resetCollaborationState(clearProfile = true): void {
       }
     }
 
-    async function restoreSessionAfterReconnect(): Promise<void> {
+    async function restoreSessionAfterReconnect(
+      reacquirePageLock = false,
+    ): Promise<void> {
       if (!sessionProfile.value || !activeProjectKey.value) {
         return;
       }
@@ -560,6 +858,13 @@ function resetCollaborationState(clearProfile = true): void {
 
         if (restoredSnapshot) {
           rememberSnapshot(restoredSnapshot);
+        }
+
+        if (reacquirePageLock) {
+          const acquired = await tryAcquirePageLock(activeMode.value);
+          if (acquired) {
+            await flushPendingPageSnapshotSync();
+          }
         }
       } catch (error) {
         console.error("[translator-collaboration] 重连恢复失败:", error);
@@ -620,8 +925,13 @@ function resetCollaborationState(clearProfile = true): void {
     }
 
     async function disconnectProjectSession(): Promise<void> {
+      await flushLiveDelta({ force: true });
+      await flushPendingPageSnapshotSync({ force: true });
       clearPendingSnapshotTimer();
       pendingSnapshotArgs.value = null;
+      unbindPageLifecycleHandlers();
+      resumeWithPageLock = false;
+      resumeInFlight = null;
 
       const activeConnection = connection.value;
       connection.value = null;
@@ -901,17 +1211,20 @@ async function releaseCurrentPageLock(): Promise<void> {
       }, resolveSnapshotSyncDelay(clonedUnits));
     }
 
-    async function flushPendingPageSnapshotSync(): Promise<void> {
+    async function flushPendingPageSnapshotSync(options?: {
+      force?: boolean;
+    }): Promise<void> {
       clearPendingSnapshotTimer();
 
       const nextSnapshotArgs = pendingSnapshotArgs.value;
       pendingSnapshotArgs.value = null;
 
-      if (
-        !nextSnapshotArgs ||
-        !sessionProfile.value ||
-        !hasCurrentPageLock.value
-      ) {
+      if (!nextSnapshotArgs || !sessionProfile.value) {
+        return;
+      }
+
+      if (!hasCurrentPageLock.value && !options?.force) {
+        pendingSnapshotArgs.value = nextSnapshotArgs;
         return;
       }
 
@@ -920,6 +1233,9 @@ async function releaseCurrentPageLock(): Promise<void> {
         !activeConnection ||
         activeConnection.state !== HubConnectionState.Connected
       ) {
+        if (options?.force) {
+          pendingSnapshotArgs.value = nextSnapshotArgs;
+        }
         return;
       }
 
@@ -936,6 +1252,28 @@ async function releaseCurrentPageLock(): Promise<void> {
       });
 
       await activeConnection.invoke("SyncPageSnapshot", nextSnapshotArgs);
+    }
+
+    /**
+     * 导出译稿前 flush 当前章节 WS 协作数据（live delta + 页快照）。
+     */
+    async function prepareChapterForManuscriptExport(
+      chapterID: string,
+    ): Promise<void> {
+      const normalizedChapterID = chapterID.trim();
+      if (!normalizedChapterID) {
+        return;
+      }
+
+      const expectedProjectKey =
+        buildOnlineChapterCollaborationKey(normalizedChapterID);
+      if (activeProjectKey.value !== expectedProjectKey) {
+        return;
+      }
+
+      clearPendingSnapshotTimer();
+      await flushLiveDelta({ force: true });
+      await flushPendingPageSnapshotSync({ force: true });
     }
 
     return {
@@ -959,6 +1297,10 @@ async function releaseCurrentPageLock(): Promise<void> {
       releaseCurrentPageLock,
       schedulePageSnapshotSync,
       flushPendingPageSnapshotSync,
+      latestLiveDelta,
+      scheduleLiveDelta,
+      flushLiveDelta,
+      prepareChapterForManuscriptExport,
     };
   },
 );

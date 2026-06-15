@@ -1,6 +1,6 @@
 /**
- * 文件用途：管理在线章节工作区的数据加载、整章图片缓存与远端 unit diff 保存。
- * 这里把在线章节伪装成与本地项目相近的页面结构，便于复用现有翻译器界面。
+ * 文件用途：管理在线章节工作区的数据加载、整章图片缓存与运行时 unit 状态。
+ * unit 落库由协作 WS 自动保存，本 store 不再调用 PUT /units。
  */
 
 import { ref } from "vue";
@@ -8,10 +8,6 @@ import { defineStore } from "pinia";
 import {
   getPageList,
   getUnitList,
-  savePageUnit,
-  type UnitCreation,
-  type UnitDiff,
-  type UnitPatch,
 } from "../api/modules";
 import {
   deleteWebProjectImageAssets,
@@ -27,7 +23,6 @@ import {
 import type { PageInfo, UnitInfo } from "../types/domain";
 
 const ONLINE_WORKSPACE_STORAGE_KEY = "poprako_online_workspace_cache_v1";
-const ONLINE_PAGE_SAVE_DEBOUNCE_MS = 450;
 const ONLINE_INITIAL_PRELOAD_PAGE_COUNT = 3;
 const ONLINE_PAGE_PREFETCH_LOOKAHEAD = 2;
 const ONLINE_PAGE_UNIT_FETCH_BATCH_SIZE = 500;
@@ -118,10 +113,6 @@ function normalizeTitle(
 
 function normalizeOptionalText(rawValue: string | undefined): string {
   return rawValue ?? "";
-}
-
-function toPatchTextValue(rawValue: string | undefined): string | null {
-  return rawValue && rawValue.length > 0 ? rawValue : null;
 }
 
 function resolvePageDisplayName(index: number): string {
@@ -346,8 +337,6 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
   const baseUnitsByPageID = ref<Record<string, LocalProjectUnit[]>>({});
   const workingUnitsByPageID = ref<Record<string, LocalProjectUnit[]>>({});
 
-  const pendingSaveTimers = new Map<string, number>();
-  const inflightSaveJobs = new Map<string, Promise<void>>();
   const inflightPageImageJobs = new Map<
     string,
     Promise<OnlineWorkspacePageRecord>
@@ -858,22 +847,19 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
 
     const currentBaseUnits = baseUnitsByPageID.value[pageID] ?? [];
     const currentWorkingUnits = workingUnitsByPageID.value[pageID] ?? [];
-    const hasPendingSave =
-      pendingSaveTimers.has(pageID) || inflightSaveJobs.has(pageID);
-
-    if (
+    const hasUnsyncedLocalEdits =
       currentWorkingUnits.length > 0 &&
-      (hasPendingSave ||
-        !areRemoteComparableUnitsEqual(
-          currentBaseUnits,
-          currentWorkingUnits,
-          pageRecord,
-        ))
-    ) {
+      !areRemoteComparableUnitsEqual(
+        currentBaseUnits,
+        currentWorkingUnits,
+        pageRecord,
+      );
+
+    if (hasUnsyncedLocalEdits) {
       return cloneUnits(currentWorkingUnits);
     }
 
-    if (currentBaseUnits.length > 0 && !hasPendingSave) {
+    if (currentBaseUnits.length > 0) {
       if (currentWorkingUnits.length === 0) {
         workingUnitsByPageID.value = {
           ...workingUnitsByPageID.value,
@@ -967,226 +953,31 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
     });
   }
 
-  function buildUnitDiff(
-    pageRecord: OnlineWorkspacePageRecord,
-    previousUnits: LocalProjectUnit[],
-    nextUnits: LocalProjectUnit[],
-  ): UnitDiff {
-    const previousUnitMap = new Map(
-      previousUnits.map((projectUnit) => [projectUnit.id, projectUnit]),
-    );
-    const nextUnitMap = new Map(
-      nextUnits.map((projectUnit) => [projectUnit.id, projectUnit]),
-    );
-
-    const deleteIDs = previousUnits
-      .filter((projectUnit) => !nextUnitMap.has(projectUnit.id))
-      .map((projectUnit) => projectUnit.id);
-
-    const insertUnits: UnitCreation[] = nextUnits
-      .filter((projectUnit) => !previousUnitMap.has(projectUnit.id))
-      .map((projectUnit) => {
-        const remoteComparable = resolveRemoteComparableUnit(
-          projectUnit,
-          pageRecord,
-        );
-
-        return {
-          id: projectUnit.id,
-          page_id: pageRecord.id,
-          index: remoteComparable.index,
-          x_coord: remoteComparable.x_coord,
-          y_coord: remoteComparable.y_coord,
-          is_bubble: remoteComparable.is_bubble,
-          is_proofread: remoteComparable.is_proofread,
-          translated_text:
-            toPatchTextValue(projectUnit.translated_text) ?? undefined,
-          proofread_text:
-            toPatchTextValue(projectUnit.proofread_text) ?? undefined,
-          translator_comment:
-            toPatchTextValue(projectUnit.translator_comment) ?? undefined,
-          translator_id: projectUnit.translator_id?.trim() || undefined,
-          proofreader_comment:
-            toPatchTextValue(projectUnit.proofreader_comment) ?? undefined,
-          proofreader_id: projectUnit.proofreader_id?.trim() || undefined,
-        };
-      });
-
-    const patchUnits: UnitPatch[] = nextUnits
-      .filter((projectUnit) => previousUnitMap.has(projectUnit.id))
-      .map((projectUnit) => {
-        const previousUnit = previousUnitMap.get(projectUnit.id)!;
-        const previousComparable = resolveRemoteComparableUnit(
-          previousUnit,
-          pageRecord,
-        );
-        const nextComparable = resolveRemoteComparableUnit(
-          projectUnit,
-          pageRecord,
-        );
-
-        const patchUnit: UnitPatch = {
-          id: projectUnit.id,
-        };
-
-        if (previousComparable.index !== nextComparable.index) {
-          patchUnit.index = nextComparable.index;
-        }
-
-        if (previousComparable.x_coord !== nextComparable.x_coord) {
-          patchUnit.x_coord = nextComparable.x_coord;
-        }
-
-        if (previousComparable.y_coord !== nextComparable.y_coord) {
-          patchUnit.y_coord = nextComparable.y_coord;
-        }
-
-        if (previousComparable.is_bubble !== nextComparable.is_bubble) {
-          patchUnit.is_bubble = nextComparable.is_bubble;
-        }
-
-        if (previousComparable.is_proofread !== nextComparable.is_proofread) {
-          patchUnit.is_proofread = nextComparable.is_proofread;
-        }
-
-        if (
-          previousComparable.translated_text !== nextComparable.translated_text
-        ) {
-          patchUnit.translated_text = toPatchTextValue(
-            projectUnit.translated_text,
-          );
-        }
-
-        if (
-          previousComparable.proofread_text !== nextComparable.proofread_text
-        ) {
-          patchUnit.proofread_text = toPatchTextValue(
-            projectUnit.proofread_text,
-          );
-        }
-
-        if (
-          previousComparable.translator_comment !==
-          nextComparable.translator_comment
-        ) {
-          patchUnit.translator_comment = toPatchTextValue(
-            projectUnit.translator_comment,
-          );
-        }
-
-        if (previousComparable.translator_id !== nextComparable.translator_id) {
-          patchUnit.translator_id = projectUnit.translator_id?.trim() || null;
-        }
-
-        if (
-          previousComparable.proofreader_comment !==
-          nextComparable.proofreader_comment
-        ) {
-          patchUnit.proofreader_comment = toPatchTextValue(
-            projectUnit.proofreader_comment,
-          );
-        }
-
-        if (
-          previousComparable.proofreader_id !== nextComparable.proofreader_id
-        ) {
-          patchUnit.proofreader_id = projectUnit.proofreader_id?.trim() || null;
-        }
-
-        return patchUnit;
-      })
-      .filter((patchUnit) => Object.keys(patchUnit).length > 1);
-
-    return {
-      delete: deleteIDs,
-      insert: insertUnits,
-      patch: patchUnits,
-    };
-  }
-
+  /** 将 working 副本同步为本地 baseline，不落库（落库由 WS 负责）。 */
   async function flushPageUnits(
     chapterID: string,
     pageID: string,
   ): Promise<void> {
-    const pendingTimer = pendingSaveTimers.get(pageID);
-    if (typeof pendingTimer === "number") {
-      window.clearTimeout(pendingTimer);
-      pendingSaveTimers.delete(pageID);
-    }
-
-    const existingJob = inflightSaveJobs.get(pageID);
-    if (existingJob) {
-      await existingJob;
-      return;
-    }
-
     const pageRecord = resolveWorkspacePage(chapterID, pageID);
     if (!pageRecord) {
       return;
     }
 
-    const previousUnits = baseUnitsByPageID.value[pageID] ?? [];
     const nextUnits = workingUnitsByPageID.value[pageID] ?? [];
-
-    if (areRemoteComparableUnitsEqual(previousUnits, nextUnits, pageRecord)) {
-      return;
-    }
-
-    const saveJob = (async () => {
-      const unitDiff = buildUnitDiff(pageRecord, previousUnits, nextUnits);
-      await savePageUnit({
-        page_id: pageID,
-        unit_diff: unitDiff,
-      });
-
-      if (pageRecord.total_unit_count !== nextUnits.length) {
-        setWorkspacePageRecord(chapterID, {
-          ...pageRecord,
-          total_unit_count: nextUnits.length,
-        });
-      }
-
-      baseUnitsByPageID.value = {
-        ...baseUnitsByPageID.value,
-        [pageID]: cloneUnits(nextUnits),
-      };
-
-      const latestUnits = workingUnitsByPageID.value[pageID] ?? [];
-      if (!areRemoteComparableUnitsEqual(nextUnits, latestUnits, pageRecord)) {
-        schedulePageUnitsSave(chapterID, pageID, latestUnits);
-      }
-    })();
-
-    inflightSaveJobs.set(pageID, saveJob);
-
-    try {
-      await saveJob;
-    } finally {
-      inflightSaveJobs.delete(pageID);
-    }
-  }
-
-  function schedulePageUnitsSave(
-    chapterID: string,
-    pageID: string,
-    units: LocalProjectUnit[],
-  ): void {
-    workingUnitsByPageID.value = {
-      ...workingUnitsByPageID.value,
-      [pageID]: cloneUnits(units),
+    baseUnitsByPageID.value = {
+      ...baseUnitsByPageID.value,
+      [pageID]: cloneUnits(nextUnits),
     };
 
-    const existingTimer = pendingSaveTimers.get(pageID);
-    if (typeof existingTimer === "number") {
-      window.clearTimeout(existingTimer);
+    if (pageRecord.total_unit_count !== nextUnits.length) {
+      setWorkspacePageRecord(chapterID, {
+        ...pageRecord,
+        total_unit_count: nextUnits.length,
+      });
     }
-
-    const timerID = window.setTimeout(() => {
-      void flushPageUnits(chapterID, pageID);
-    }, ONLINE_PAGE_SAVE_DEBOUNCE_MS);
-    pendingSaveTimers.set(pageID, timerID);
   }
 
+  /** 同步整章本地 baseline。 */
   async function flushChapterSaves(chapterID: string): Promise<void> {
     const targetWorkspace = workspaces.value[chapterID];
     if (!targetWorkspace) {
@@ -1213,7 +1004,6 @@ export const useOnlineWorkspaceStore = defineStore("online-workspace", () => {
     schedulePagePrefetch,
     replaceRuntimePageUnits,
     updateLastPageIndex,
-    schedulePageUnitsSave,
     flushPageUnits,
     flushChapterSaves,
   };
