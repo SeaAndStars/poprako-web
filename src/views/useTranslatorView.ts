@@ -66,7 +66,10 @@ import {
 import {
   appendCacheBustQueryToSharedAssetUrl,
 } from "../api/objectStorage";
-import { TRANSLATOR_INTERACTION_TICK_MS } from "../translator/interactionTick";
+import {
+  REMOTE_LIVE_DELTA_APPLY_MS,
+  TEXT_EDIT_SYNC_MS,
+} from "../translator/interactionTick";
 
 export const USER_PROFILE_UPDATED_EVENT = "poprako:user-profile-updated";
 
@@ -130,7 +133,6 @@ export function useTranslatorView() {
     markerDragOrigX,
     markerDragOrigY,
     markerDragMoved,
-    markerDragPreview,
     markerDragOverlayRect,
   } = storeToRefs(translatorUIStore);
   const {
@@ -152,7 +154,14 @@ export function useTranslatorView() {
   let pendingMarkerDragEvent: MouseEvent | null = null;
   /** 标记拖拽 rAF 帧 ID。 */
   let markerDragRafId: number | null = null;
-  let lastMarkerDragPreviewAt = 0;
+  /** 被拖标记 DOM 元素（拖动期间 imperative 更新位置）。 */
+  let draggingMarkerElement: HTMLElement | null = null;
+  /** 拖动中的最新归一化坐标（非响应式，松手后写回 store）。 */
+  let pendingMarkerDragCoords: { x: number; y: number } | null = null;
+  /** 待合并的画布平移 mousemove 事件。 */
+  let pendingStagePanEvent: MouseEvent | null = null;
+  /** 画布平移 rAF 帧 ID。 */
+  let stagePanRafId: number | null = null;
   /** 待合并的文本编辑同步。 */
   let pendingTextFieldSync: {
     field: EditableFieldKey;
@@ -1375,7 +1384,7 @@ export function useTranslatorView() {
 
     if (
       Date.now() - lastRemoteLiveDeltaAppliedAt >=
-      TRANSLATOR_INTERACTION_TICK_MS
+      REMOTE_LIVE_DELTA_APPLY_MS
     ) {
       applyIncomingPageLiveDelta(pendingRemoteLiveDelta);
       pendingRemoteLiveDelta = null;
@@ -2246,12 +2255,14 @@ export function useTranslatorView() {
       return;
     }
 
-    if (Date.now() - lastTextFieldSyncAt >= TRANSLATOR_INTERACTION_TICK_MS) {
+    if (Date.now() - lastTextFieldSyncAt >= TEXT_EDIT_SYNC_MS) {
       flushPendingTextFieldSync();
       return;
     }
 
-    textFieldSyncRafId = window.requestAnimationFrame(tickTextFieldSync);
+    if (pendingTextFieldSync) {
+      textFieldSyncRafId = window.requestAnimationFrame(tickTextFieldSync);
+    }
   }
 
   function queueSelectedUnitFieldUpdate(
@@ -2723,6 +2734,28 @@ export function useTranslatorView() {
       return;
     }
     if (!isDragging.value) return;
+
+    pendingStagePanEvent = event;
+    if (stagePanRafId === null) {
+      stagePanRafId = window.requestAnimationFrame(tickStagePanMove);
+    }
+  }
+
+  function cancelStagePanRaf(): void {
+    if (stagePanRafId !== null) {
+      cancelAnimationFrame(stagePanRafId);
+      stagePanRafId = null;
+    }
+    pendingStagePanEvent = null;
+  }
+
+  function flushStagePanMove(): void {
+    const event = pendingStagePanEvent;
+    pendingStagePanEvent = null;
+    if (!event || !isDragging.value || draggingUnitID.value) {
+      return;
+    }
+
     const dx = event.clientX - stageDragLastX.value;
     const dy = event.clientY - stageDragLastY.value;
     if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
@@ -2734,11 +2767,21 @@ export function useTranslatorView() {
     stageDragLastY.value = event.clientY;
   }
 
+  function tickStagePanMove(): void {
+    stagePanRafId = null;
+    flushStagePanMove();
+
+    if (isDragging.value && !draggingUnitID.value && pendingStagePanEvent) {
+      stagePanRafId = window.requestAnimationFrame(tickStagePanMove);
+    }
+  }
+
   function handleStageDragEnd(event?: MouseEvent): void {
     if (draggingUnitID.value) {
       handleMarkerDragEnd(event);
       return;
     }
+    cancelStagePanRaf();
     isDragging.value = false;
     /* stageDragMoved 延迟重置——click 事件在 mouseup 之后触发，
        如果立即清零，overlay click 会误判为未拖拽而创建标记。 */
@@ -2775,6 +2818,38 @@ export function useTranslatorView() {
   }
 
   /* ── 标记拖拽 ── */
+  function resolveDraggingMarkerElement(unitID: string): HTMLElement | null {
+    const overlayElement = stageOverlayRef.value;
+    if (!overlayElement) {
+      return null;
+    }
+
+    return overlayElement.querySelector<HTMLElement>(
+      `[data-unit-id="${unitID}"]`,
+    );
+  }
+
+  function applyMarkerDragTransform(
+    element: HTMLElement,
+    x: number,
+    y: number,
+  ): void {
+    element.style.left = `${x * 100}%`;
+    element.style.top = `${y * 100}%`;
+    element.style.transform = "translate(-50%, -50%)";
+  }
+
+  function resetDraggingMarkerElement(): void {
+    if (!draggingMarkerElement) {
+      return;
+    }
+
+    draggingMarkerElement.style.left = "";
+    draggingMarkerElement.style.top = "";
+    draggingMarkerElement.style.transform = "";
+    draggingMarkerElement = null;
+  }
+
   function cancelMarkerDragRaf(): void {
     if (markerDragRafId !== null) {
       cancelAnimationFrame(markerDragRafId);
@@ -2809,11 +2884,11 @@ export function useTranslatorView() {
       Math.min(1, markerDragOrigY.value + dy / overlayRect.height),
     );
 
-    markerDragPreview.value = {
-      unitId: draggingUnitID.value,
-      x: nextX,
-      y: nextY,
-    };
+    pendingMarkerDragCoords = { x: nextX, y: nextY };
+    if (draggingMarkerElement) {
+      applyMarkerDragTransform(draggingMarkerElement, nextX, nextY);
+    }
+
     translatorCollaborationStore.scheduleLiveDelta({
       moves: [
         {
@@ -2833,22 +2908,15 @@ export function useTranslatorView() {
     }
 
     applyMarkerDragMoveFromEvent(event);
-    lastMarkerDragPreviewAt = Date.now();
   }
 
   function tickMarkerDragMove(): void {
     markerDragRafId = null;
+    flushMarkerDragMove();
 
-    if (!pendingMarkerDragEvent || !draggingUnitID.value) {
-      return;
+    if (draggingUnitID.value && pendingMarkerDragEvent) {
+      markerDragRafId = window.requestAnimationFrame(tickMarkerDragMove);
     }
-
-    if (Date.now() - lastMarkerDragPreviewAt >= TRANSLATOR_INTERACTION_TICK_MS) {
-      flushMarkerDragMove();
-      return;
-    }
-
-    markerDragRafId = window.requestAnimationFrame(tickMarkerDragMove);
   }
 
   function handleMarkerDragStart(event: MouseEvent, unitID: string): void {
@@ -2871,16 +2939,13 @@ export function useTranslatorView() {
       markerDragOrigX.value = unit.x_coord;
       markerDragOrigY.value = unit.y_coord;
       markerDragMoved.value = false;
-      markerDragPreview.value = {
-        unitId: unitID,
-        x: unit.x_coord,
-        y: unit.y_coord,
-      };
+      pendingMarkerDragCoords = { x: unit.x_coord, y: unit.y_coord };
+      await nextTick();
       const overlayEl = stageOverlayRef.value;
       markerDragOverlayRect.value = overlayEl
         ? overlayEl.getBoundingClientRect()
         : null;
-      lastMarkerDragPreviewAt = 0;
+      draggingMarkerElement = resolveDraggingMarkerElement(unitID);
       event.preventDefault();
     })();
   }
@@ -2908,11 +2973,12 @@ export function useTranslatorView() {
 
     const unitID = draggingUnitID.value;
     const didMove = markerDragMoved.value;
-    const preview = markerDragPreview.value;
+    const finalCoords = pendingMarkerDragCoords;
 
     draggingUnitID.value = null;
-    markerDragPreview.value = null;
+    pendingMarkerDragCoords = null;
     markerDragOverlayRect.value = null;
+    resetDraggingMarkerElement();
     /* markerDragMoved 延迟重置——同 stageDragMoved，
        避免 mouseup 之后的 click 事件误创建标记。 */
     if (markerDragMoved.value) {
@@ -2924,19 +2990,19 @@ export function useTranslatorView() {
       handleSelectUnit(unitID, !didMove);
     }
 
-    if (didMove && preview?.unitId === unitID) {
+    if (didMove && finalCoords) {
       const nextUnits = currentPageUnits.value.map((projectUnit) => {
         if (projectUnit.id !== unitID) {
           return projectUnit;
         }
 
         return buildTouchedUnit(projectUnit, {
-          x_coord: preview.x,
-          y_coord: preview.y,
+          x_coord: finalCoords.x,
+          y_coord: finalCoords.y,
         });
       });
       syncLocalPageUnits(nextUnits);
-      void translatorCollaborationStore.flushLiveDelta();
+      void translatorCollaborationStore.flushLiveDelta({ force: true });
       void translatorCollaborationStore.flushPendingPageSnapshotSync();
     }
   }
@@ -3155,7 +3221,9 @@ export function useTranslatorView() {
 
   onBeforeUnmount(() => {
     cancelMarkerDragRaf();
+    cancelStagePanRaf();
     cancelRemoteLiveDeltaRaf();
+    cancelTextFieldSyncRaf();
     flushPendingTextFieldSync();
     window.removeEventListener(
       USER_PROFILE_UPDATED_EVENT,
@@ -3181,7 +3249,6 @@ export function useTranslatorView() {
     projectRecord,
     isDragging,
     draggingUnitID,
-    markerDragPreview,
     handleReturnToWorkspace,
     workspaceHeaderTitle,
     activeProjectEditors,

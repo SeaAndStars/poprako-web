@@ -485,19 +485,25 @@
               <TranslatorMarker
                 v-for="projectUnit in currentPageUnits"
                 :key="projectUnit.id"
+                v-memo="[
+                  projectUnit.id,
+                  projectUnit.x_coord,
+                  projectUnit.y_coord,
+                  projectUnit.index,
+                  projectUnit.is_bubble,
+                  selectedUnitID === projectUnit.id,
+                  editingUnitID === projectUnit.id,
+                  draggingUnitID === projectUnit.id,
+                  markerSizeSliderDraft,
+                  markerOpacityValue,
+                  isDarkTheme,
+                  isUnitTranslated(projectUnit),
+                  isUnitProofread(projectUnit),
+                ]"
+                :unit-id="projectUnit.id"
                 :index="projectUnit.index"
-                :x="
-                  draggingUnitID === projectUnit.id &&
-                  markerDragPreview?.unitId === projectUnit.id
-                    ? markerDragPreview.x
-                    : projectUnit.x_coord
-                "
-                :y="
-                  draggingUnitID === projectUnit.id &&
-                  markerDragPreview?.unitId === projectUnit.id
-                    ? markerDragPreview.y
-                    : projectUnit.y_coord
-                "
+                :x="projectUnit.x_coord"
+                :y="projectUnit.y_coord"
                 :size="markerSizeSliderDraft"
                 :opacity="markerOpacityValue"
                 :active="projectUnit.id === selectedUnitID"
@@ -969,7 +975,6 @@ const {
   projectRecord,
   isDragging,
   draggingUnitID,
-  markerDragPreview,
   handleReturnToWorkspace,
   workspaceHeaderTitle,
   activeProjectEditors,

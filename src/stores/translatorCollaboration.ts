@@ -19,10 +19,13 @@ import {
 } from "../local-project/types";
 import { useAuthStore } from "./auth";
 import { buildOnlineChapterCollaborationKey } from "../online-workspace/collaboration";
-import { TRANSLATOR_INTERACTION_TICK_MS } from "../translator/interactionTick";
+import {
+  MARKER_DRAG_SYNC_MS,
+  TEXT_EDIT_SYNC_MS,
+} from "../translator/interactionTick";
 
-const DEFAULT_PAGE_SNAPSHOT_SYNC_DELAY_MS = TRANSLATOR_INTERACTION_TICK_MS;
-const LARGE_PAGE_SNAPSHOT_SYNC_DELAY_MS = TRANSLATOR_INTERACTION_TICK_MS;
+const DEFAULT_PAGE_SNAPSHOT_SYNC_DELAY_MS = TEXT_EDIT_SYNC_MS;
+const LARGE_PAGE_SNAPSHOT_SYNC_DELAY_MS = TEXT_EDIT_SYNC_MS;
 const LARGE_PAGE_SNAPSHOT_UNIT_THRESHOLD = 200;
 const LARGE_PAGE_SNAPSHOT_SOFT_LIMIT_BYTES = 256 * 1024;
 
@@ -92,7 +95,8 @@ interface PendingLiveDeltaState {
   textChanges: Map<string, TranslatorPageUnitTextChangeDelta>;
 }
 
-const LIVE_DELTA_SYNC_INTERVAL_MS = TRANSLATOR_INTERACTION_TICK_MS;
+const LIVE_DELTA_MOVE_SYNC_INTERVAL_MS = MARKER_DRAG_SYNC_MS;
+const LIVE_DELTA_TEXT_SYNC_INTERVAL_MS = TEXT_EDIT_SYNC_MS;
 
 interface JoinProjectArgs extends TranslatorCollaboratorIdentity {
   project_key: string;
@@ -353,6 +357,7 @@ export const useTranslatorCollaborationStore = defineStore(
     const pendingSnapshotArgs = ref<PendingSnapshotArgs | null>(null);
     let liveDeltaRafId: number | null = null;
     let lastLiveDeltaSentAt = 0;
+    let liveDeltaSendInFlight = false;
     let liveDeltaSeq = 0;
     const pendingLiveDelta = ref<PendingLiveDeltaState | null>(null);
     const latestLiveDelta = ref<PageLiveDelta | null>(null);
@@ -435,6 +440,7 @@ function resetCollaborationState(clearProfile = true): void {
       pendingSnapshotArgs.value = null;
       pendingLiveDelta.value = null;
       latestLiveDelta.value = null;
+      liveDeltaSendInFlight = false;
       clearLiveDeltaRaf();
 
       if (clearProfile) {
@@ -454,6 +460,14 @@ function resetCollaborationState(clearProfile = true): void {
         window.cancelAnimationFrame(liveDeltaRafId);
         liveDeltaRafId = null;
       }
+    }
+
+    function resolveLiveDeltaSyncIntervalMs(
+      pending: PendingLiveDeltaState,
+    ): number {
+      return pending.moves.size > 0
+        ? LIVE_DELTA_MOVE_SYNC_INTERVAL_MS
+        : LIVE_DELTA_TEXT_SYNC_INTERVAL_MS;
     }
 
     function scheduleLiveDelta(args: {
@@ -498,7 +512,8 @@ function resetCollaborationState(clearProfile = true): void {
         return;
       }
 
-      if (Date.now() - lastLiveDeltaSentAt >= LIVE_DELTA_SYNC_INTERVAL_MS) {
+      const interval = resolveLiveDeltaSyncIntervalMs(pendingLiveDelta.value);
+      if (Date.now() - lastLiveDeltaSentAt >= interval) {
         void flushLiveDelta();
         return;
       }
@@ -512,6 +527,13 @@ function resetCollaborationState(clearProfile = true): void {
       }
 
       if (!hasCurrentPageLock.value && !options?.force) {
+        return;
+      }
+
+      if (liveDeltaSendInFlight) {
+        if (liveDeltaRafId === null) {
+          liveDeltaRafId = window.requestAnimationFrame(tickLiveDeltaSync);
+        }
         return;
       }
 
@@ -548,21 +570,34 @@ function resetCollaborationState(clearProfile = true): void {
         return;
       }
 
-      lastLiveDeltaSentAt = Date.now();
+      liveDeltaSendInFlight = true;
 
       try {
         await activeConnection.invoke("SyncPageLiveDelta", payload);
+        lastLiveDeltaSentAt = Date.now();
       } catch (error) {
         console.error("[translator-collaboration] 实时增量同步失败:", error);
+        pendingLiveDelta.value = {
+          moves: new Map([
+            ...(pendingLiveDelta.value?.moves.entries() ?? []),
+            ...pending.moves.entries(),
+          ]),
+          textChanges: new Map([
+            ...(pendingLiveDelta.value?.textChanges.entries() ?? []),
+            ...pending.textChanges.entries(),
+          ]),
+        };
         if (lastKnownUnitsByPageKey.value[activePageKey.value]) {
           schedulePageSnapshotSync(
             lastKnownUnitsByPageKey.value[activePageKey.value],
           );
         }
+      } finally {
+        liveDeltaSendInFlight = false;
       }
 
       if (pendingLiveDelta.value) {
-        liveDeltaRafId = window.requestAnimationFrame(tickLiveDeltaSync);
+        void flushLiveDelta(options);
       }
     }
 

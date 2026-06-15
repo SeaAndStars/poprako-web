@@ -2,6 +2,7 @@
   <button
     type="button"
     class="translator-marker"
+    :data-unit-id="unitId"
     :class="{
       'is-dark': dark,
       'is-active': active,
@@ -29,6 +30,8 @@
 import { computed, type CSSProperties } from "vue";
 
 interface Props {
+  /** 单元 ID，用于拖动时 imperative 定位。 */
+  unitId: string;
   index: number | string;
   x: number;
   y: number;
@@ -74,6 +77,7 @@ const resolvedOpacity = computed(() => {
 const rootStyle = computed<CSSProperties>(() => ({
   left: `${props.x * 100}%`,
   top: `${props.y * 100}%`,
+  transform: "translate(-50%, -50%)",
   width: `${resolvedSize.value}px`,
   height: `${resolvedSize.value}px`,
   minWidth: `${resolvedSize.value}px`,
@@ -107,7 +111,6 @@ function handleMouseDown(mouseEvent: MouseEvent): void {
   margin: 0;
   border: 0;
   background: transparent;
-  transform: translate(-50%, -50%);
   cursor: pointer;
   user-select: none;
   outline: none;
@@ -223,6 +226,7 @@ function handleMouseDown(mouseEvent: MouseEvent): void {
 .translator-marker.is-dragging {
   z-index: 40;
   cursor: grabbing;
+  will-change: transform, left, top;
 }
 
 .translator-marker.is-dragging .translator-marker__surface {
